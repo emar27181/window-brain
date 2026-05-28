@@ -24,6 +24,36 @@ function loadICSEvents(): ICSEvent[] {
   catch { return []; }
 }
 
+// ─── iCal export ─────────────────────────────────────────────────
+
+function exportICS(events: ICSEvent[]) {
+  if (events.length === 0) return;
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//window brain//EN',
+    ...events.flatMap((ev) => {
+      const d = ev.dateStr.replace(/-/g, '');
+      return [
+        'BEGIN:VEVENT',
+        `DTSTART;VALUE=DATE:${d}`,
+        `DTEND;VALUE=DATE:${d}`,
+        `SUMMARY:${ev.title}`,
+        `UID:${d}-${Math.random().toString(36).slice(2)}@window-brain`,
+        'END:VEVENT',
+      ];
+    }),
+    'END:VCALENDAR',
+  ];
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `calendar-${new Date().toISOString().slice(0,10)}.ics`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 // ─── iCal parser ─────────────────────────────────────────────────
 
 function parseICS(content: string): ICSEvent[] {
@@ -163,6 +193,10 @@ export function CalendarWidget() {
         editable
         right={
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {icsEvents.length > 0 && (
+              <button onPointerDown={(e) => e.stopPropagation()} onClick={() => exportICS(icsEvents)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.1em', padding: '1px 2px' }} title="ICS エクスポート">↑</button>
+            )}
             <button
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); setImporting(true); setTimeout(() => urlInputRef.current?.focus(), 30); }}
