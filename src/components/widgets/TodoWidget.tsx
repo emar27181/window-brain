@@ -3,22 +3,48 @@ import { Head } from '../Head';
 
 const TODOS_KEY = 'wb.todos.v1';
 
-interface Todo { id: number; text: string; done: boolean }
+export interface Todo {
+  id: number;
+  text: string;
+  done: boolean;
+  createdAt: string;    // ISO 8601
+  completedAt?: string; // ISO 8601、完了時に設定
+}
 
 const DEFAULT_TODOS: Todo[] = [
-  { id: 1, text: 'デザインシステムの整理', done: false },
-  { id: 2, text: 'ウィジェット v2 レビュー', done: false },
-  { id: 3, text: 'リサイズの当たり判定検証', done: true },
-  { id: 4, text: '夕方ミーティング', done: false },
-  { id: 5, text: 'CI のテンプレ修正', done: false },
+  { id: 1, text: 'デザインシステムの整理', done: false, createdAt: new Date().toISOString() },
+  { id: 2, text: 'ウィジェット v2 レビュー', done: false, createdAt: new Date().toISOString() },
+  { id: 3, text: 'リサイズの当たり判定検証', done: true, createdAt: new Date().toISOString(), completedAt: new Date().toISOString() },
+  { id: 4, text: '夕方ミーティング', done: false, createdAt: new Date().toISOString() },
 ];
+
+function migrateItem(raw: Record<string, unknown>): Todo {
+  const id = Number(raw.id) || Date.now();
+  return {
+    id,
+    text: String(raw.text ?? ''),
+    done: Boolean(raw.done),
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date(id > 1e12 ? id : Date.now()).toISOString(),
+    completedAt: typeof raw.completedAt === 'string' ? raw.completedAt : undefined,
+  };
+}
 
 function loadTodos(): Todo[] {
   try {
     const p = JSON.parse(localStorage.getItem(TODOS_KEY) ?? 'null');
-    if (Array.isArray(p)) return p as Todo[];
+    if (Array.isArray(p)) return p.map(migrateItem);
   } catch {}
   return DEFAULT_TODOS;
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dayMs   = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  if (dayMs === todayMs) return d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+  if (dayMs === todayMs - 86400000) return '昨日';
+  return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
 function exportTodos(items: Todo[]) {
@@ -37,7 +63,6 @@ export function TodoWidget() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
-  const newInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -50,11 +75,16 @@ export function TodoWidget() {
     return () => window.removeEventListener('wb:data-updated', onUpdate);
   }, []);
 
-  const toggle = (id: number) =>
-    setItems((prev) => prev.map((i) => i.id === id ? { ...i, done: !i.done } : i));
+  const toggle = (id: number) => {
+    const now = new Date().toISOString();
+    setItems((prev) => prev.map((i) => {
+      if (i.id !== id) return i;
+      const willBeDone = !i.done;
+      return { ...i, done: willBeDone, completedAt: willBeDone ? now : undefined };
+    }));
+  };
 
-  const remove = (id: number) =>
-    setItems((prev) => prev.filter((i) => i.id !== id));
+  const remove = (id: number) => setItems((prev) => prev.filter((i) => i.id !== id));
 
   const startEdit = (item: Todo) => {
     setEditingId(item.id);
@@ -67,8 +97,7 @@ export function TodoWidget() {
       const text = editText.trim();
       if (text) setItems((prev) => prev.map((i) => i.id === editingId ? { ...i, text } : i));
     }
-    setEditingId(null);
-    setEditText('');
+    setEditingId(null); setEditText('');
   };
 
   const cancelEdit = () => { setEditingId(null); setEditText(''); };
@@ -76,18 +105,16 @@ export function TodoWidget() {
   const add = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newText.trim()) return;
-    setItems((prev) => [{ id: Date.now(), text: newText.trim(), done: false }, ...prev]);
+    setItems((prev) => [{ id: Date.now(), text: newText.trim(), done: false, createdAt: new Date().toISOString() }, ...prev]);
     setNewText('');
-    newInputRef.current?.focus();
   };
 
   const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
+    const file = e.target.files?.[0]; e.target.value = '';
     if (!file) return;
     try {
-      const data = JSON.parse(await file.text()) as Todo[];
-      if (Array.isArray(data)) setItems(data);
+      const data = JSON.parse(await file.text());
+      if (Array.isArray(data)) setItems(data.map(migrateItem));
     } catch { alert('読み込みに失敗しました'); }
   };
 
@@ -131,7 +158,6 @@ export function TodoWidget() {
                 )}
               </button>
 
-              {/* Text or edit input */}
               {editingId === item.id ? (
                 <>
                   <input
@@ -155,18 +181,20 @@ export function TodoWidget() {
                   >
                     {item.text}
                   </span>
-                  {/* Action buttons — always visible, not hover-only */}
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  {/* 日時 */}
+                  <span className="mono muted" style={{ fontSize: 9, letterSpacing: '.04em', flexShrink: 0, opacity: .5 }}>
+                    {item.done && item.completedAt ? `✓ ${fmtDate(item.completedAt)}` : fmtDate(item.createdAt)}
+                  </span>
+                  {/* アクション */}
+                  <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
                     {!item.done && (
                       <button onPointerDown={(e) => e.stopPropagation()} onClick={() => startEdit(item)}
                         className="todo-action"
-                        style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 5px', fontSize: 12, borderRadius: 4, lineHeight: 1 }}
-                        title="編集">✎</button>
+                        style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 5px', fontSize: 12, borderRadius: 4, lineHeight: 1 }}>✎</button>
                     )}
                     <button onPointerDown={(e) => e.stopPropagation()} onClick={() => remove(item.id)}
                       className="todo-action"
-                      style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 5px', fontSize: 14, borderRadius: 4, lineHeight: 1 }}
-                      title="削除">×</button>
+                      style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 5px', fontSize: 14, borderRadius: 4, lineHeight: 1 }}>×</button>
                   </div>
                 </>
               )}
@@ -174,20 +202,11 @@ export function TodoWidget() {
           ))}
         </div>
 
-        {/* New task input */}
-        <form
-          onSubmit={add}
-          onPointerDown={(e) => e.stopPropagation()}
-          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, paddingTop: 8, marginTop: 4 }}
-        >
+        <form onSubmit={add} onPointerDown={(e) => e.stopPropagation()}
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, paddingTop: 8, marginTop: 4 }}>
           <button type="submit" style={{ background: 'var(--chip)', border: '.5px solid var(--rule)', borderRadius: 6, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--ink-mute)', fontSize: 16, lineHeight: 1, flexShrink: 0, padding: 0 }}>+</button>
-          <input
-            ref={newInputRef}
-            value={newText}
-            onChange={(e) => setNewText(e.target.value)}
-            placeholder="新しいタスクを追加"
-            style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit', fontSize: 12 }}
-          />
+          <input value={newText} onChange={(e) => setNewText(e.target.value)} placeholder="新しいタスクを追加"
+            style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit', fontSize: 12 }} />
         </form>
       </div>
     </div>

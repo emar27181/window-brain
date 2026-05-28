@@ -322,7 +322,12 @@ export default function App() {
       if (Array.isArray(json.layout)) { setLayout(json.layout); saveLayout(json.layout); }
       if (json.data) {
         if (Array.isArray(json.data.todos)) localStorage.setItem('wb.todos.v1', JSON.stringify(json.data.todos));
-        if (typeof json.data.notes === 'string') localStorage.setItem('wb.notes.v1', JSON.stringify(json.data.notes));
+        // notes: 旧フォーマット(string) / 新フォーマット({ content, updatedAt }) 両対応
+        if (typeof json.data.notes === 'string') {
+          localStorage.setItem('wb.notes.v1', JSON.stringify({ content: json.data.notes, updatedAt: new Date().toISOString() }));
+        } else if (json.data.notes && typeof (json.data.notes as Record<string, unknown>).content === 'string') {
+          localStorage.setItem('wb.notes.v1', JSON.stringify(json.data.notes));
+        }
         if (json.data.calendar && typeof json.data.calendar === 'object') localStorage.setItem('wb.calendar.v1', JSON.stringify(json.data.calendar));
         window.dispatchEvent(new CustomEvent('wb:data-updated'));
       }
