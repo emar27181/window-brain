@@ -3,9 +3,6 @@ dist
 .DS_Store
 *.local
 
-# Windows/WSL メタデータ
-*Zone.Identifier
-
 # Claude Code ローカル設定
 .claude/
 
