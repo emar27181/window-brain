@@ -362,17 +362,20 @@ export default function App() {
 
       <div className="surface">
         {isStacked ? (
-          <div className="stack">
+          <div className="mobile-grid">
             {[...layout].sort((a, b) => a.y - b.y || a.x - b.x).map((item) => {
               const def = WIDGET_REGISTRY.find((w) => w.type === item.type);
               if (!def) return null;
               const W = def.Component;
-              const klass = item.h >= 4 ? 'hero' : item.h >= 3 ? 'tall' : '';
-              const stackSize = { w: Math.max(item.w, 3), h: item.h };
+              // w>=4 widgets (clock, youtube, music, github) span both columns
+              const span2 = item.w >= 4 || item.h >= 3;
+              const H_MAP: Record<number, number> = { 1: 110, 2: 170, 3: 250, 4: 330 };
+              const cellH = H_MAP[Math.min(item.h, 4)] ?? 170;
+              const mobileSize = { w: span2 ? Math.max(item.w, 4) : 2, h: item.h };
               return (
-                <div key={item.id} className={`w ${klass}`}>
-                  <W size={stackSize} />
-                  <button className="close" onClick={() => removeWidget(item.id)}>×</button>
+                <div key={item.id} className={`w${span2 ? ' mg-span2' : ''}`} style={{ height: cellH }}>
+                  <W size={mobileSize} />
+                  <button className="close" onPointerDown={(e) => e.stopPropagation()} onClick={() => removeWidget(item.id)}>×</button>
                 </div>
               );
             })}
