@@ -2,3 +2,12 @@ node_modules
 dist
 .DS_Store
 *.local
+
+# Windows/WSL メタデータ
+*Zone.Identifier
+
+# Claude Code ローカル設定
+.claude/
+
+# オリジナルデザインプロトタイプ（src/ に移植済み）
+project/
