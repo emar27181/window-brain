@@ -3,8 +3,9 @@ dist
 .DS_Store
 *.local
 
-# Claude Code ローカル設定
-.claude/
 
 # オリジナルデザインプロトタイプ（src/ に移植済み）
 project/
+
+# Local Netlify folder
+.netlify
