@@ -269,11 +269,13 @@ body.density-compact .grid{--gap:6px}
 body.density-cozy .grid{--gap:14px}
 
 /* Mobile / narrow viewport */
-.stack{position:relative;z-index:3;flex:1;min-height:0;overflow:auto;padding:6px 14px 80px;display:flex;flex-direction:column;gap:12px;scrollbar-width:thin}
-.stack .w{position:relative;width:100%;left:auto !important;top:auto !important;height:auto;min-height:140px}
+.stack{position:relative;z-index:3;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:6px 14px 80px;display:flex;flex-direction:column;gap:12px;scrollbar-width:thin;
+  -webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;touch-action:pan-y}
+.stack .w{position:relative;width:100%;left:auto !important;top:auto !important;height:auto;min-height:140px;touch-action:pan-y}
 .stack .w.tall{min-height:240px}
 .stack .w.hero{min-height:340px}
 .stack .w .resize{display:none}
+.stack .w .w-head{cursor:default}
 @media (max-width: 900px){
   .dock{padding:10px 12px;font-size:10px;gap:8px;flex-wrap:wrap;align-items:center}
   .dock .l{gap:8px;min-width:0;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
