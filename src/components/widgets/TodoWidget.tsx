@@ -48,7 +48,7 @@ function fmtDate(iso: string): string {
 }
 
 function exportTodos(items: Todo[]) {
-  const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json; charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

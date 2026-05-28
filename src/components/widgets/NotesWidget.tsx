@@ -44,7 +44,8 @@ function fmtUpdated(iso: string): string {
 }
 
 function exportNotes(data: NotesData) {
-  const blob = new Blob([data.content], { type: 'text/plain' });
+  // BOM付き UTF-8 で書き出し (Windows で文字化けしない)
+  const blob = new Blob(['﻿' + data.content], { type: 'text/plain; charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

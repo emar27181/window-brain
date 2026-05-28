@@ -308,6 +308,14 @@ body.density-cozy .grid{--gap:14px}
 .mobile-grid .w .resize{display:none}
 .mobile-grid .w .w-head{cursor:default}
 .mg-span2{grid-column:1/-1}
+/* Mobile rearrange mode */
+.mobile-grid.is-rearranging{touch-action:none}
+.mobile-grid.is-rearranging .w:not(.mg-dragging){
+  animation:wiggle .55s ease-in-out infinite alternate;transform-origin:center;cursor:grab}
+.mobile-grid.is-rearranging .w:nth-child(even):not(.mg-dragging){animation-delay:-.27s}
+.w.mg-swap-target{
+  border-color:var(--accent,#9aa6ff) !important;
+  box-shadow:0 0 0 2px var(--accent,#9aa6ff),0 8px 30px rgba(0,0,0,.35) !important}
 @media (max-width: 900px){
   .dock{padding:10px 12px;font-size:10px;gap:8px;flex-wrap:wrap;align-items:center}
   .dock .l{gap:8px;min-width:0;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}

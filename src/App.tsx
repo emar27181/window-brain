@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Background } from './components/Background';
 import { SettingsModal } from './components/SettingsModal';
 import {
@@ -92,6 +92,17 @@ export default function App() {
   const vw = useViewport();
   const isStacked = vw < 900;
 
+  // ─── Mobile reorder ───────────────────────────────────────────────
+  const MOBILE_ORDER_KEY = 'wb.mobile.order.v1';
+  const [mobileEditMode, setMobileEditMode] = useState(false);
+  const [mobileOrder, setMobileOrder] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(MOBILE_ORDER_KEY) ?? '[]') as string[]; }
+    catch { return []; }
+  });
+  const [mobileDragId, setMobileDragId] = useState<string | null>(null);
+  const [mobileSwapId, setMobileSwapId] = useState<string | null>(null);
+  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Apply theme / typography
   const accent = ACCENTS[t.accent] ?? ACCENTS.aurora;
   const typeface = TYPEFACES[t.typeface] ?? TYPEFACES.geist;
@@ -126,6 +137,109 @@ export default function App() {
   const saveLayout = (l: WidgetItem[]) => {
     try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(l)); } catch {}
   };
+
+  // Sync mobileOrder when layout changes
+  useEffect(() => {
+    const sortedIds = [...layout].sort((a, b) => a.y - b.y || a.x - b.x).map((i) => i.id);
+    setMobileOrder((prev) => {
+      const filtered = prev.filter((id) => layout.some((i) => i.id === id));
+      const newIds = sortedIds.filter((id) => !filtered.includes(id));
+      const merged = [...filtered, ...newIds];
+      try { localStorage.setItem(MOBILE_ORDER_KEY, JSON.stringify(merged)); } catch {}
+      return merged;
+    });
+  }, [layout]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mobile drag-to-reorder
+  const startMobileDrag = useCallback((
+    el: HTMLElement, pointerId: number, startX: number, startY: number, itemId: string
+  ) => {
+    const rect = el.getBoundingClientRect();
+    const offX = startX - rect.left, offY = startY - rect.top;
+
+    const ghost = document.createElement('div');
+    Object.assign(ghost.style, {
+      position: 'fixed', zIndex: '200', pointerEvents: 'none',
+      width: rect.width + 'px', height: rect.height + 'px',
+      left: rect.left + 'px', top: rect.top + 'px',
+      borderRadius: '18px', background: 'rgba(22,25,33,.78)',
+      border: '1px solid rgba(255,255,255,.28)',
+      boxShadow: '0 24px 60px rgba(0,0,0,.65)',
+      backdropFilter: 'blur(20px)',
+      transform: 'scale(1.06)', transition: 'none',
+    });
+    document.body.appendChild(ghost);
+    setMobileDragId(itemId);
+
+    try { el.setPointerCapture(pointerId); } catch {}
+
+    const onMove = (ev: PointerEvent) => {
+      ghost.style.left = (ev.clientX - offX) + 'px';
+      ghost.style.top  = (ev.clientY - offY) + 'px';
+      ghost.style.visibility = 'hidden';
+      const under = document.elementsFromPoint(ev.clientX, ev.clientY);
+      ghost.style.visibility = 'visible';
+      const hit = under.find(
+        (e) => (e as HTMLElement).dataset?.widgetId && (e as HTMLElement).dataset.widgetId !== itemId
+      ) as HTMLElement | undefined;
+      setMobileSwapId(hit?.dataset.widgetId ?? null);
+    };
+
+    const onEnd = () => {
+      ghost.remove();
+      el.removeEventListener('pointermove', onMove as EventListener);
+      el.removeEventListener('pointerup', onEnd);
+      el.removeEventListener('pointercancel', onEnd);
+      setMobileDragId(null);
+      setMobileSwapId((prevSwap) => {
+        if (prevSwap) {
+          setMobileOrder((order) => {
+            const next = [...order];
+            const aIdx = next.indexOf(itemId), bIdx = next.indexOf(prevSwap);
+            if (aIdx !== -1 && bIdx !== -1) [next[aIdx], next[bIdx]] = [next[bIdx], next[aIdx]];
+            try { localStorage.setItem(MOBILE_ORDER_KEY, JSON.stringify(next)); } catch {}
+            return next;
+          });
+        }
+        return null;
+      });
+    };
+
+    el.addEventListener('pointermove', onMove as EventListener);
+    el.addEventListener('pointerup', onEnd);
+    el.addEventListener('pointercancel', onEnd);
+  }, []);
+
+  const onMobileWidgetPointerDown = useCallback((e: React.PointerEvent, itemId: string) => {
+    if ((e.target as HTMLElement).closest('button,input,textarea')) return;
+    const el = e.currentTarget as HTMLElement;
+    const pointerId = e.pointerId, startX = e.clientX, startY = e.clientY;
+
+    if (mobileEditMode) {
+      e.preventDefault();
+      startMobileDrag(el, pointerId, startX, startY, itemId);
+      return;
+    }
+
+    // Long-press (500ms) to activate rearrange mode
+    const cancel = () => {
+      if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; }
+      window.removeEventListener('pointermove', onPreMove);
+      window.removeEventListener('pointerup', onPreUp);
+    };
+    const onPreMove = (ev: PointerEvent) => {
+      if (Math.abs(ev.clientX - startX) > 10 || Math.abs(ev.clientY - startY) > 10) cancel();
+    };
+    const onPreUp = () => cancel();
+    window.addEventListener('pointermove', onPreMove, { passive: true });
+    window.addEventListener('pointerup', onPreUp, { once: true });
+
+    longPressRef.current = setTimeout(() => {
+      window.removeEventListener('pointermove', onPreMove);
+      setMobileEditMode(true);
+      startMobileDrag(el, pointerId, startX, startY, itemId);
+    }, 500);
+  }, [mobileEditMode, startMobileDrag]);
 
   // ─── Grid metrics ─────────────────────────────────────────────
   const getMetrics = useCallback(() => {
@@ -286,7 +400,7 @@ export default function App() {
       },
       tweaks: { ...t },
     };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json; charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
@@ -357,6 +471,15 @@ export default function App() {
           <button onClick={exportData} title="JSONとして書き出す">EXPORT</button>
           <button onClick={triggerImport} title="JSONから読み込む">IMPORT</button>
           <span className="dot"></span>
+          {isStacked && (
+            <button
+              onClick={() => { setMobileEditMode((m) => !m); setMobileDragId(null); setMobileSwapId(null); }}
+              style={{ background: mobileEditMode ? 'var(--chip-hover)' : 'transparent', borderRadius: 8 }}
+              title="ウィジェットを並び替え"
+            >
+              {mobileEditMode ? 'DONE' : '⠿'}
+            </button>
+          )}
           <button onClick={() => setSettings(true)} title="設定">SETTINGS</button>
           <button className="add" onClick={() => setPicker(true)}>
             <span className="plus">+</span><span>ADD</span>
@@ -367,18 +490,29 @@ export default function App() {
 
       <div className="surface">
         {isStacked ? (
-          <div className="mobile-grid">
-            {[...layout].sort((a, b) => a.y - b.y || a.x - b.x).map((item) => {
+          <div className={`mobile-grid${mobileEditMode ? ' is-rearranging' : ''}`}>
+            {(mobileOrder.length > 0
+              ? mobileOrder.map((id) => layout.find((i) => i.id === id)).filter(Boolean) as WidgetItem[]
+              : [...layout].sort((a, b) => a.y - b.y || a.x - b.x)
+            ).map((item) => {
               const def = WIDGET_REGISTRY.find((w) => w.type === item.type);
               if (!def) return null;
               const W = def.Component;
-              // w>=4 widgets (clock, youtube, music, github) span both columns
               const span2 = item.w >= 4 || item.h >= 3;
               const H_MAP: Record<number, number> = { 1: 110, 2: 170, 3: 250, 4: 330 };
               const cellH = H_MAP[Math.min(item.h, 4)] ?? 170;
               const mobileSize = { w: span2 ? Math.max(item.w, 4) : 2, h: item.h };
+              const isDragging = mobileDragId === item.id;
+              const isSwap = mobileSwapId === item.id;
               return (
-                <div key={item.id} className={`w${span2 ? ' mg-span2' : ''}`} style={{ height: cellH }}>
+                <div
+                  key={item.id}
+                  data-widget-id={item.id}
+                  className={`w${span2 ? ' mg-span2' : ''}${isDragging ? ' mg-dragging' : ''}${isSwap ? ' mg-swap-target' : ''}`}
+                  style={{ height: cellH, opacity: isDragging ? 0.15 : 1, transition: 'opacity .15s, border-color .15s, box-shadow .15s' }}
+                  onPointerDown={(e) => onMobileWidgetPointerDown(e, item.id)}
+                  onContextMenu={(e) => { if (mobileEditMode) e.preventDefault(); }}
+                >
                   <W size={mobileSize} />
                   <button className="close" onPointerDown={(e) => e.stopPropagation()} onClick={() => removeWidget(item.id)}>×</button>
                 </div>
