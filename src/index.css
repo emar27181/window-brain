@@ -269,7 +269,10 @@ body.density-compact .grid{--gap:6px}
 body.density-cozy .grid{--gap:14px}
 
 /* Mobile / narrow viewport */
-.stack{position:relative;z-index:3;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:6px 14px 80px;display:flex;flex-direction:column;gap:12px;scrollbar-width:thin;
+/* height:100% mirrors .grid — .surface is a flex item so has a defined height */
+.stack{position:relative;z-index:3;height:100%;overflow-y:auto;overflow-x:hidden;
+  padding:6px 14px 80px;display:flex;flex-direction:column;gap:12px;
+  box-sizing:border-box;scrollbar-width:thin;
   -webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;touch-action:pan-y}
 .stack .w{position:relative;width:100%;left:auto !important;top:auto !important;height:auto;min-height:140px;touch-action:pan-y}
 .stack .w.tall{min-height:240px}
