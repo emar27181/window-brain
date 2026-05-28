@@ -1,36 +1,92 @@
+import { useState, useRef } from 'react';
+
+const STORAGE_KEY = 'wb.widget.youtube.v1';
+const DEFAULT_ID = 'jfKfPfyJRdk'; // lofi girl 24/7
+
+function parseYouTubeId(input: string): string | null {
+  const s = input.trim();
+  const m = s.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (m) return m[1];
+  if (/^[a-zA-Z0-9_-]{11}$/.test(s)) return s;
+  return null;
+}
+
+function loadVideoId(): string {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') ?? DEFAULT_ID; }
+  catch { return DEFAULT_ID; }
+}
+
 export function YouTubeWidget() {
+  const [videoId, setVideoId] = useState(loadVideoId);
+  const [editing, setEditing] = useState(false);
+  const [input, setInput] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const applyUrl = () => {
+    const id = parseYouTubeId(input);
+    if (id) {
+      setVideoId(id);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(id)); } catch {}
+    }
+    setEditing(false);
+    setInput('');
+  };
+
+  const startEditing = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setInput('');
+    setEditing(true);
+    setTimeout(() => inputRef.current?.focus(), 30);
+  };
+
   return (
     <div className="w-body" style={{ padding: 0 }}>
-      <div style={{ position: 'absolute', top: 14, left: 18, right: 18, display: 'flex', justifyContent: 'space-between', zIndex: 2 }}>
-        <div className="w-head" style={{ margin: 0 }}>
-          <div className="title" style={{ color: '#fff' }}>
+      {/* Header overlay */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 3, background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 100%)' }}>
+        <div className="w-head" style={{ margin: 0, color: '#fff' }}>
+          <div className="title">
             <span className="glyph" style={{ background: '#ff3355', boxShadow: '0 0 8px #ff3355' }}></span>
-            LIVE STREAM
+            YOUTUBE
           </div>
         </div>
-        <div className="mono" style={{ fontSize: 10, letterSpacing: '.16em', color: 'rgba(255,255,255,.7)' }}>1.2K WATCHING</div>
-      </div>
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: `linear-gradient(180deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,.1) 35%, rgba(0,0,0,.0) 60%, rgba(0,0,0,.6) 100%),
-                     linear-gradient(160deg,#3a2a55 0%,#5a3068 30%,#a8556a 60%,#f0a070 100%)`
-      }}>
-        <div style={{ position: 'absolute', left: 0, right: 0, top: '58%', height: 1, background: 'rgba(255,255,255,.2)' }} />
-        <div style={{ position: 'absolute', left: '55%', top: '42%', width: 80, height: 80, borderRadius: '50%', background: 'radial-gradient(circle at 35% 35%, #ffd4a0, #ff8060 60%, transparent 75%)', opacity: .9 }} />
-        <div style={{ position: 'absolute', inset: '12% 10% 12% 10%', border: '2px solid rgba(0,0,0,.35)', borderRadius: 2 }}>
-          <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 2, background: 'rgba(0,0,0,.35)' }} />
-          <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: 2, background: 'rgba(0,0,0,.35)' }} />
-        </div>
-      </div>
-      <div style={{ position: 'absolute', left: 18, bottom: 14, right: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', color: '#fff', zIndex: 2 }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: '-.005em' }}>lofi hip hop radio — beats to relax/study to</div>
-          <div className="mono" style={{ fontSize: 10, letterSpacing: '.14em', marginTop: 4, opacity: .7 }}>CHILLEDCOW · 24/7</div>
-        </div>
-        <button style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(255,255,255,.15)', backdropFilter: 'blur(10px)', border: '.5px solid rgba(255,255,255,.3)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="11" height="12" viewBox="0 0 11 12"><path d="M0 0L11 6L0 12Z" fill="currentColor" /></svg>
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={startEditing}
+          style={{ background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(8px)', border: '.5px solid rgba(255,255,255,.25)', color: '#fff', borderRadius: 6, padding: '3px 9px', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.12em', cursor: 'pointer' }}
+        >
+          URL ✎
         </button>
       </div>
+
+      {/* URL edit overlay */}
+      {editing && (
+        <div
+          onPointerDown={(e) => e.stopPropagation()}
+          style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(8,10,16,.88)', backdropFilter: 'blur(12px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24 }}
+        >
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.18em', color: 'rgba(255,255,255,.55)' }}>YOUTUBE URL / VIDEO ID</div>
+          <input
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') applyUrl(); if (e.key === 'Escape') setEditing(false); }}
+            placeholder="https://youtu.be/..."
+            style={{ width: '100%', background: 'rgba(255,255,255,.08)', border: '.5px solid rgba(255,255,255,.25)', borderRadius: 8, padding: '9px 12px', color: '#fff', font: 'inherit', fontSize: 13, outline: 'none' }}
+          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={applyUrl} style={{ background: 'var(--accent,#9aa6ff)', border: 'none', borderRadius: 7, padding: '7px 16px', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.12em', cursor: 'pointer', color: '#0a0d14', fontWeight: 500 }}>SET</button>
+            <button onClick={() => setEditing(false)} style={{ background: 'rgba(255,255,255,.08)', border: '.5px solid rgba(255,255,255,.2)', borderRadius: 7, padding: '7px 16px', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.12em', cursor: 'pointer', color: 'rgba(255,255,255,.7)' }}>CANCEL</button>
+          </div>
+        </div>
+      )}
+
+      <iframe
+        src={`https://www.youtube.com/embed/${videoId}?autoplay=1`}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowFullScreen
+        title="YouTube player"
+      />
     </div>
   );
 }
