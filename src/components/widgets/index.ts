@@ -27,10 +27,14 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { type: 'system',   label: 'システム',   Component: SystemWidget,     defaultSize: { w: 3, h: 2 } },
 ];
 
-export const ALLOWED_SIZES: AllowedSize[] = [
-  { w: 1, h: 1 }, { w: 2, h: 1 }, { w: 2, h: 2 }, { w: 3, h: 2 },
-  { w: 4, h: 2 }, { w: 4, h: 3 }, { w: 4, h: 4 },
-];
+// 全幅(1〜13) × 全高(1〜6) の任意サイズを許可
+export const ALLOWED_SIZES: AllowedSize[] = (() => {
+  const sizes: AllowedSize[] = [];
+  for (let h = 1; h <= 6; h++)
+    for (let w = 1; w <= 13; w++)
+      sizes.push({ w, h });
+  return sizes;
+})();
 
 export {
   ClockWidget, WeatherWidget, TodoWidget, CalendarWidget, NotesWidget,
