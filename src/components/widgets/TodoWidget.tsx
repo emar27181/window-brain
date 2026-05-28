@@ -26,7 +26,7 @@ function exportTodos(items: Todo[]) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `tasks-${new Date().toISOString().slice(0,10)}.json`;
+  a.download = `tasks-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -37,6 +37,7 @@ export function TodoWidget() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
+  const newInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -55,13 +56,6 @@ export function TodoWidget() {
   const remove = (id: number) =>
     setItems((prev) => prev.filter((i) => i.id !== id));
 
-  const add = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newText.trim()) return;
-    setItems((prev) => [{ id: Date.now(), text: newText.trim(), done: false }, ...prev]);
-    setNewText('');
-  };
-
   const startEdit = (item: Todo) => {
     setEditingId(item.id);
     setEditText(item.text);
@@ -75,6 +69,16 @@ export function TodoWidget() {
     }
     setEditingId(null);
     setEditText('');
+  };
+
+  const cancelEdit = () => { setEditingId(null); setEditText(''); };
+
+  const add = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newText.trim()) return;
+    setItems((prev) => [{ id: Date.now(), text: newText.trim(), done: false }, ...prev]);
+    setNewText('');
+    newInputRef.current?.focus();
   };
 
   const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,56 +102,92 @@ export function TodoWidget() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="mono muted" style={{ fontSize: 10 }}>{done}/{items.length}</span>
             <button onPointerDown={(e) => e.stopPropagation()} onClick={() => exportTodos(items)}
-              style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.1em', padding: '1px 2px' }} title="JSON エクスポート">↑</button>
+              style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, padding: '2px 3px' }} title="エクスポート">↑</button>
             <button onPointerDown={(e) => e.stopPropagation()} onClick={() => fileInputRef.current?.click()}
-              style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.1em', padding: '1px 2px' }} title="JSON インポート">↓</button>
-            <input ref={fileInputRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={onImportFile} />
+              style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, padding: '2px 3px' }} title="インポート">↓</button>
+            <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={onImportFile} />
           </div>
         }
       />
+
       <div className="w-content" style={{ gap: 0, overflow: 'hidden', minHeight: 0 }}>
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, paddingRight: 2 }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingRight: 2 }}>
           {items.map((item) => (
-            <div key={item.id} className="todo-row" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 13, position: 'relative', flexShrink: 0 }}>
-              <div onClick={() => toggle(item.id)} style={{ width: 14, height: 14, borderRadius: 4, border: '1px solid var(--rule-strong)', background: item.done ? 'var(--accent,#9aa6ff)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .15s', cursor: 'pointer' }}>
-                {item.done && <svg width="9" height="9" viewBox="0 0 9 9"><path d="M1 4.5L3.5 7L8 1.5" stroke="#0a0d14" strokeWidth="1.5" fill="none" strokeLinecap="round" /></svg>}
-              </div>
+            <div
+              key={item.id}
+              className="todo-row"
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '.5px solid var(--rule)', flexShrink: 0 }}
+            >
+              {/* Checkbox */}
+              <button
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => toggle(item.id)}
+                style={{ width: 18, height: 18, borderRadius: 5, border: '1.5px solid var(--rule-strong)', background: item.done ? 'var(--accent,#9aa6ff)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .15s', cursor: 'pointer', padding: 0 }}
+              >
+                {item.done && (
+                  <svg width="10" height="10" viewBox="0 0 10 10">
+                    <path d="M1.5 5L4 7.5L8.5 2" stroke="#0a0d14" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
 
+              {/* Text or edit input */}
               {editingId === item.id ? (
-                <input
-                  ref={editInputRef}
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') { setEditingId(null); setEditText(''); } }}
-                  onBlur={saveEdit}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  style={{ flex: 1, minWidth: 0, background: 'var(--track)', border: '.5px solid var(--rule-strong)', borderRadius: 5, padding: '1px 6px', color: 'inherit', font: 'inherit', fontSize: 13, outline: 'none' }}
-                />
+                <>
+                  <input
+                    ref={editInputRef}
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    style={{ flex: 1, minWidth: 0, background: 'var(--track)', border: '.5px solid var(--accent,#9aa6ff)', borderRadius: 6, padding: '3px 8px', color: 'inherit', font: 'inherit', fontSize: 13, outline: 'none' }}
+                  />
+                  <button onPointerDown={(e) => e.stopPropagation()} onClick={saveEdit}
+                    style={{ background: 'var(--accent,#9aa6ff)', border: 'none', borderRadius: 5, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: '#0a0d14', fontSize: 13, fontWeight: 600 }}>✓</button>
+                  <button onPointerDown={(e) => e.stopPropagation()} onClick={cancelEdit}
+                    style={{ background: 'var(--chip)', border: 'none', borderRadius: 5, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: 'var(--ink-mute)', fontSize: 13 }}>✕</button>
+                </>
               ) : (
-                <span
-                  onDoubleClick={() => !item.done && startEdit(item)}
-                  title={item.done ? '' : 'ダブルクリックで編集'}
-                  style={{ flex: 1, minWidth: 0, textDecoration: item.done ? 'line-through' : 'none', opacity: item.done ? .4 : 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: item.done ? 'default' : 'text' }}
-                >
-                  {item.text}
-                </span>
-              )}
-
-              {editingId !== item.id && (
-                <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-                  {!item.done && (
-                    <button className="todo-del" onPointerDown={(e) => e.stopPropagation()} onClick={() => startEdit(item)} style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '1px 3px', fontSize: 11, opacity: 0, transition: 'opacity .15s', lineHeight: 1 }}>✎</button>
-                  )}
-                  <button className="todo-del" onPointerDown={(e) => e.stopPropagation()} onClick={() => remove(item.id)} style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '1px 4px', fontSize: 14, lineHeight: 1, opacity: 0, transition: 'opacity .15s' }} aria-label="削除">×</button>
-                </div>
+                <>
+                  <span
+                    onClick={() => !item.done && startEdit(item)}
+                    style={{ flex: 1, minWidth: 0, fontSize: 13, textDecoration: item.done ? 'line-through' : 'none', opacity: item.done ? .4 : 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: item.done ? 'default' : 'pointer' }}
+                  >
+                    {item.text}
+                  </span>
+                  {/* Action buttons — always visible, not hover-only */}
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    {!item.done && (
+                      <button onPointerDown={(e) => e.stopPropagation()} onClick={() => startEdit(item)}
+                        className="todo-action"
+                        style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 5px', fontSize: 12, borderRadius: 4, lineHeight: 1 }}
+                        title="編集">✎</button>
+                    )}
+                    <button onPointerDown={(e) => e.stopPropagation()} onClick={() => remove(item.id)}
+                      className="todo-action"
+                      style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 5px', fontSize: 14, borderRadius: 4, lineHeight: 1 }}
+                      title="削除">×</button>
+                  </div>
+                </>
               )}
             </div>
           ))}
         </div>
 
-        <form onSubmit={add} onPointerDown={(e) => e.stopPropagation()} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6, marginTop: 6, borderTop: '.5px solid var(--rule)' }}>
-          <span className="mono muted" style={{ fontSize: 11, opacity: .5 }}>+</span>
-          <input value={newText} onChange={(e) => setNewText(e.target.value)} placeholder="新しいタスク（Enterで追加）" style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit', fontSize: 12 }} />
+        {/* New task input */}
+        <form
+          onSubmit={add}
+          onPointerDown={(e) => e.stopPropagation()}
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, paddingTop: 8, marginTop: 4 }}
+        >
+          <button type="submit" style={{ background: 'var(--chip)', border: '.5px solid var(--rule)', borderRadius: 6, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--ink-mute)', fontSize: 16, lineHeight: 1, flexShrink: 0, padding: 0 }}>+</button>
+          <input
+            ref={newInputRef}
+            value={newText}
+            onChange={(e) => setNewText(e.target.value)}
+            placeholder="新しいタスクを追加"
+            style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit', fontSize: 12 }}
+          />
         </form>
       </div>
     </div>

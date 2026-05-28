@@ -231,6 +231,11 @@ body.theme-light .s-seg-btn.active{box-shadow:0 1px 0 rgba(255,255,255,.6) inset
 
 /* Util */
 .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+/* Todo アクションボタン — デスクトップは hover 連動、モバイルは常時表示 */
+.todo-action{opacity:0.28;transition:opacity .15s}
+.todo-row:hover .todo-action{opacity:0.75}
+.todo-action:hover{opacity:1 !important;color:#ff7a8a}
+/* 後方互換 */
 .todo-row:hover .todo-del{opacity:.7}
 .todo-del:hover{opacity:1 !important;color:#ff7a8a !important}
 
@@ -300,4 +305,23 @@ body.density-cozy .grid{--gap:14px}
 @media (max-width: 380px){
   .dock .l{display:none}
   .dock{justify-content:flex-end}
+}
+
+/* ─── タッチデバイス向けUX補正 ─────────────────────────────────────
+   hover が効かないモバイルでは opacity:0 の要素が永久に見えないため
+   常時うっすら表示に切り替える                                        */
+@media (hover: none) {
+  /* ウィジェット閉じるボタン */
+  .w .close { opacity: 0.4; }
+  .w .close:active { opacity: 1; background: rgba(255,80,80,.3); }
+
+  /* ウィジェットヘッダ編集マーク */
+  .w-head .edit-mark { opacity: 0.55; transform: scale(1); }
+
+  /* Todo アクションボタン */
+  .todo-action { opacity: 0.45 !important; }
+  .todo-action:active { opacity: 1 !important; }
+
+  /* dock ボタンの当たり判定を広げる */
+  .dock button { min-width: 36px; min-height: 36px; }
 }
