@@ -1,8 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
+import { marked } from 'marked';
 import { Head } from '../Head';
 
 const NOTES_KEY = 'wb.notes.v1';
-const DEFAULT_NOTES = '窓辺で、思いつくままに。\n\n— アンビエントUIは何かを示すのではなく、その場の空気をつくる。';
+const DEFAULT_NOTES = `# 窓辺で
+
+思いつくままに。
+
+**bold**, *italic*, \`code\`
+
+- リスト項目
+- 別の項目
+
+> アンビエントUIは何かを示すのではなく、その場の空気をつくる。
+`;
+
+marked.use({ breaks: true, gfm: true });
 
 function loadNotes(): string {
   try {
@@ -17,13 +30,14 @@ function exportNotes(text: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `notes-${new Date().toISOString().slice(0,10)}.txt`;
+  a.download = `notes-${new Date().toISOString().slice(0, 10)}.md`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function NotesWidget() {
   const [v, setV] = useState<string>(loadNotes);
+  const [preview, setPreview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -40,9 +54,10 @@ export function NotesWidget() {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    const text = await file.text();
-    setV(text);
+    setV(await file.text());
   };
+
+  const html = preview ? String(marked.parse(v)) : '';
 
   return (
     <div className="w-body">
@@ -51,22 +66,51 @@ export function NotesWidget() {
         editable
         right={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="mono muted" style={{ fontSize: 10 }}>{v.length} chars</span>
+            {/* Edit / Preview toggle */}
+            <div className="s-seg" style={{ padding: 2, borderRadius: 7 }}>
+              <button
+                className={`s-seg-btn${!preview ? ' active' : ''}`}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => setPreview(false)}
+                style={{ padding: '3px 8px', fontSize: 9, borderRadius: 5 }}
+              >
+                EDIT
+              </button>
+              <button
+                className={`s-seg-btn${preview ? ' active' : ''}`}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => setPreview(true)}
+                style={{ padding: '3px 8px', fontSize: 9, borderRadius: 5 }}
+              >
+                MD
+              </button>
+            </div>
             <button onPointerDown={(e) => e.stopPropagation()} onClick={() => exportNotes(v)}
-              style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.1em', padding: '1px 2px' }} title=".txt エクスポート">↑</button>
+              style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, padding: '2px 3px' }} title=".md エクスポート">↑</button>
             <button onPointerDown={(e) => e.stopPropagation()} onClick={() => fileInputRef.current?.click()}
-              style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.1em', padding: '1px 2px' }} title=".txt インポート">↓</button>
+              style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, padding: '2px 3px' }} title=".md インポート">↓</button>
             <input ref={fileInputRef} type="file" accept=".txt,.md,text/*" style={{ display: 'none' }} onChange={onImportFile} />
           </div>
         }
       />
+
       <div className="w-content">
-        <textarea
-          value={v}
-          onChange={(e) => setV(e.target.value)}
-          spellCheck={false}
-          style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit', fontSize: 13, lineHeight: 1.55, resize: 'none', padding: 0 }}
-        />
+        {preview ? (
+          <div
+            className="md-preview"
+            onPointerDown={(e) => e.stopPropagation()}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        ) : (
+          <textarea
+            value={v}
+            onChange={(e) => setV(e.target.value)}
+            onPointerDown={(e) => e.stopPropagation()}
+            spellCheck={false}
+            placeholder="# メモを書こう&#10;&#10;**bold**, *italic*, `code` が使えます"
+            style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit', fontSize: 13, lineHeight: 1.6, resize: 'none', padding: 0 }}
+          />
+        )}
       </div>
     </div>
   );

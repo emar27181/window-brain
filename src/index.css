@@ -262,6 +262,30 @@ body.theme-light .w:hover *{scrollbar-color:rgba(40,40,60,.22) transparent}
 .muted{color:rgba(255,255,255,.45)}
 body.theme-light .muted{color:rgba(60,60,80,.55)}
 .row{display:flex;align-items:center;gap:8px}
+
+/* Markdown プレビュー -------------------------------------------- */
+.md-preview{flex:1;min-height:0;overflow-y:auto;font-size:13px;line-height:1.65;color:inherit;scrollbar-width:thin}
+.md-preview>*:first-child{margin-top:0 !important}
+.md-preview>*:last-child{margin-bottom:0 !important}
+.md-preview h1{font-size:17px;font-weight:600;margin:.9em 0 .35em;letter-spacing:-.02em}
+.md-preview h2{font-size:15px;font-weight:600;margin:.8em 0 .3em;letter-spacing:-.01em}
+.md-preview h3{font-size:13px;font-weight:600;margin:.7em 0 .25em}
+.md-preview h4,.md-preview h5,.md-preview h6{font-size:12px;font-weight:500;margin:.6em 0 .2em;opacity:.8}
+.md-preview p{margin:0 0 .65em}
+.md-preview strong{font-weight:600}
+.md-preview em{font-style:italic}
+.md-preview code{font-family:var(--font-mono);font-size:11px;background:var(--track);border:.5px solid var(--rule);border-radius:4px;padding:1px 5px;letter-spacing:0}
+.md-preview pre{background:var(--track);border:.5px solid var(--rule);border-radius:8px;padding:10px 12px;overflow-x:auto;margin:.6em 0}
+.md-preview pre code{background:transparent;border:none;padding:0;font-size:11px}
+.md-preview ul,.md-preview ol{padding-left:18px;margin:.3em 0 .65em}
+.md-preview li{margin:.18em 0}
+.md-preview blockquote{border-left:2px solid var(--accent,#9aa6ff);padding-left:10px;margin:.5em 0;opacity:.7;font-style:italic}
+.md-preview a{color:var(--accent,#9aa6ff);text-decoration:none}
+.md-preview a:hover{text-decoration:underline}
+.md-preview hr{border:none;border-top:.5px solid var(--rule-strong);margin:.8em 0}
+.md-preview table{width:100%;border-collapse:collapse;font-size:12px;margin:.5em 0}
+.md-preview th,.md-preview td{padding:4px 8px;border:.5px solid var(--rule);text-align:left}
+.md-preview th{background:var(--track);font-weight:500;font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase}
 ::selection{background:var(--accent,#9aa6ff);color:#0a0d14}
 
 /* Prevent iframes from blocking drag/resize pointer events */
