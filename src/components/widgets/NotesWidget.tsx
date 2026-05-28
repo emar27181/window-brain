@@ -9,16 +9,9 @@ export interface NotesData {
   updatedAt: string; // ISO 8601
 }
 
-const DEFAULT_CONTENT = `# 窓辺で
+const DEFAULT_CONTENT = `窓辺で、思いつくままに。
 
-思いつくままに。
-
-**bold**, *italic*, \`code\` が使えます
-
-- リスト項目
-- 別の項目
-
-> アンビエントUIは何かを示すのではなく、その場の空気をつくる。
+— アンビエントUIは何かを示すのではなく、その場の空気をつくる。
 `;
 
 marked.use({ breaks: true, gfm: true });
@@ -120,7 +113,7 @@ export function NotesWidget() {
             onChange={(e) => setContent(e.target.value)}
             onPointerDown={(e) => e.stopPropagation()}
             spellCheck={false}
-            placeholder="# メモ&#10;&#10;**bold**, *italic*, `code` が使えます"
+            placeholder="メモを書こう…"
             style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit', fontSize: 13, lineHeight: 1.6, resize: 'none', padding: 0 }}
           />
         )}
