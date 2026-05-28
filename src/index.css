@@ -259,6 +259,10 @@ body.theme-light .muted{color:rgba(60,60,80,.55)}
 .row{display:flex;align-items:center;gap:8px}
 ::selection{background:var(--accent,#9aa6ff);color:#0a0d14}
 
+/* Prevent iframes from blocking drag/resize pointer events */
+.grid.is-editing .w iframe,
+.w.resizing iframe { pointer-events: none; }
+
 /* Density */
 body.density-compact .surface{padding:0 14px 40px}
 body.density-compact .grid{--gap:6px}
