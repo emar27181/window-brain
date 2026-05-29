@@ -18,5 +18,4 @@
 
 ## 禁止事項
 
-- `netlify deploy` / `git push` / `gh pr` など **外部へ公開・デプロイする操作は一切行わない**
 - ブランチの checkout・reset --hard・force push も事前確認なしに実行しない
