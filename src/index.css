@@ -346,6 +346,8 @@ body.density-cozy .grid{--gap:14px}
   /* ウィジェット閉じるボタン */
   .w .close { opacity: 0.4; }
   .w .close:active { opacity: 1; background: rgba(255,80,80,.3); }
+  /* ×ボタン(right:8px, width:18px → 右端から26px)とヘッダ右スロットの重なりを回避 */
+  .w-body { padding-right: 32px; }
 
   /* ウィジェットヘッダ編集マーク */
   .w-head .edit-mark { opacity: 0.55; transform: scale(1); }
