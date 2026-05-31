@@ -71,3 +71,8 @@ export interface ResizeState {
   w: number;
   h: number;
 }
+
+export interface WidgetSettings {
+  accent?: string;
+  typeface?: string;
+}
