@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Head } from '../Head';
+import type { Size } from '../../types';
 
 const TODOS_KEY = 'wb.todos.v1';
 
@@ -57,7 +58,7 @@ function exportTodos(items: Todo[]) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function TodoWidget() {
+export function TodoWidget({ size }: { size: Size }) {
   const [items, setItems] = useState<Todo[]>(loadTodos);
   const [newText, setNewText] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -203,7 +204,7 @@ export function TodoWidget() {
         </div>
 
         <form onSubmit={add} onPointerDown={(e) => e.stopPropagation()}
-          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, paddingTop: 8, marginTop: 4 }}>
+          style={{ flexShrink: 0, display: size.h < 2 ? 'none' : 'flex', alignItems: 'center', gap: 8, paddingTop: 8, marginTop: 4 }}>
           <button type="submit" style={{ background: 'var(--chip)', border: '.5px solid var(--rule)', borderRadius: 6, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--ink-mute)', fontSize: 16, lineHeight: 1, flexShrink: 0, padding: 0 }}>+</button>
           <input value={newText} onChange={(e) => setNewText(e.target.value)} placeholder="新しいタスクを追加"
             style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit', fontSize: 12 }} />
