@@ -101,6 +101,9 @@ export default function App() {
   });
   const [mobileDragId, setMobileDragId] = useState<string | null>(null);
   const [mobileSwapId, setMobileSwapId] = useState<string | null>(null);
+  const [mobilePreviewOrder, setMobilePreviewOrder] = useState<string[] | null>(null);
+  const mobileOrderRef = useRef(mobileOrder);
+  mobileOrderRef.current = mobileOrder;
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Apply theme / typography
@@ -173,6 +176,8 @@ export default function App() {
 
     try { el.setPointerCapture(pointerId); } catch {}
 
+    let currentSwapId: string | null = null;
+
     const onMove = (ev: PointerEvent) => {
       ghost.style.left = (ev.clientX - offX) + 'px';
       ghost.style.top  = (ev.clientY - offY) + 'px';
@@ -182,7 +187,19 @@ export default function App() {
       const hit = under.find(
         (e) => (e as HTMLElement).dataset?.widgetId && (e as HTMLElement).dataset.widgetId !== itemId
       ) as HTMLElement | undefined;
-      setMobileSwapId(hit?.dataset.widgetId ?? null);
+      const newSwapId = hit?.dataset.widgetId ?? null;
+      if (newSwapId === currentSwapId) return;
+      currentSwapId = newSwapId;
+      setMobileSwapId(newSwapId);
+      if (newSwapId) {
+        const order = mobileOrderRef.current;
+        const filtered = order.filter((id) => id !== itemId);
+        const bIdx = filtered.indexOf(newSwapId);
+        if (bIdx !== -1) filtered.splice(bIdx, 0, itemId);
+        setMobilePreviewOrder(filtered);
+      } else {
+        setMobilePreviewOrder(null);
+      }
     };
 
     const onEnd = () => {
@@ -191,15 +208,11 @@ export default function App() {
       el.removeEventListener('pointerup', onEnd);
       el.removeEventListener('pointercancel', onEnd);
       setMobileDragId(null);
-      setMobileSwapId((prevSwap) => {
-        if (prevSwap) {
-          setMobileOrder((order) => {
-            const next = [...order];
-            const aIdx = next.indexOf(itemId), bIdx = next.indexOf(prevSwap);
-            if (aIdx !== -1 && bIdx !== -1) [next[aIdx], next[bIdx]] = [next[bIdx], next[aIdx]];
-            try { localStorage.setItem(MOBILE_ORDER_KEY, JSON.stringify(next)); } catch {}
-            return next;
-          });
+      setMobileSwapId(null);
+      setMobilePreviewOrder((preview) => {
+        if (preview) {
+          try { localStorage.setItem(MOBILE_ORDER_KEY, JSON.stringify(preview)); } catch {}
+          setMobileOrder(preview);
         }
         return null;
       });
@@ -491,8 +504,8 @@ export default function App() {
       <div className="surface">
         {isStacked ? (
           <div className={`mobile-grid${mobileEditMode ? ' is-rearranging' : ''}`}>
-            {(mobileOrder.length > 0
-              ? mobileOrder.map((id) => layout.find((i) => i.id === id)).filter(Boolean) as WidgetItem[]
+            {((mobilePreviewOrder ?? mobileOrder).length > 0
+              ? (mobilePreviewOrder ?? mobileOrder).map((id) => layout.find((i) => i.id === id)).filter(Boolean) as WidgetItem[]
               : [...layout].sort((a, b) => a.y - b.y || a.x - b.x)
             ).map((item) => {
               const def = WIDGET_REGISTRY.find((w) => w.type === item.type);

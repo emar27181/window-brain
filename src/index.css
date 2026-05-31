@@ -86,11 +86,11 @@ body.theme-light .w.dragging{box-shadow:0 20px 50px rgba(40,40,60,.22);border-co
 @keyframes nope{0%,100%{transform:scale(1.035) translateX(0)}25%{transform:scale(1.035) translateX(-3px)}75%{transform:scale(1.035) translateX(3px)}}
 .w.resizing{transition:none;z-index:30}
 .w.reflowing{transition:left .32s cubic-bezier(.22,.7,.18,1),top .32s cubic-bezier(.22,.7,.18,1),width .32s cubic-bezier(.22,.7,.18,1),height .32s cubic-bezier(.22,.7,.18,1)}
-.grid.is-editing .w:not(.dragging){animation:wiggle .55s ease-in-out infinite alternate;transform-origin:center}
-.grid.is-editing .w:nth-child(odd):not(.dragging){animation-delay:-.27s}
+.grid.is-editing .w:not(.dragging){animation:wiggle .4s ease-in-out infinite alternate;transform-origin:center}
+.grid.is-editing .w:nth-child(odd):not(.dragging){animation-delay:-.2s}
 @keyframes wiggle{
-  from{transform:rotate(-.35deg) translateY(0)}
-  to{transform:rotate(.35deg) translateY(0)}
+  from{transform:rotate(-1.5deg) translateY(-1.5px)}
+  to{transform:rotate(1.5deg) translateY(1.5px)}
 }
 .w-body{position:absolute;inset:0;display:flex;flex-direction:column;padding:16px 18px}
 .w-head{display:flex;align-items:center;justify-content:space-between;font-family:var(--font-mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:10px;flex-shrink:0;cursor:grab}
@@ -311,8 +311,8 @@ body.density-cozy .grid{--gap:14px}
 /* Mobile rearrange mode */
 .mobile-grid.is-rearranging{touch-action:none}
 .mobile-grid.is-rearranging .w:not(.mg-dragging){
-  animation:wiggle .55s ease-in-out infinite alternate;transform-origin:center;cursor:grab}
-.mobile-grid.is-rearranging .w:nth-child(even):not(.mg-dragging){animation-delay:-.27s}
+  animation:wiggle .4s ease-in-out infinite alternate;transform-origin:center;cursor:grab}
+.mobile-grid.is-rearranging .w:nth-child(even):not(.mg-dragging){animation-delay:-.2s}
 .w.mg-swap-target{
   border-color:var(--accent,#9aa6ff) !important;
   box-shadow:0 0 0 2px var(--accent,#9aa6ff),0 8px 30px rgba(0,0,0,.35) !important}
