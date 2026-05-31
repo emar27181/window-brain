@@ -146,6 +146,7 @@ export function TodoWidget({ size }: { size: Size }) {
               className="todo-row"
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '.5px solid var(--rule)', flexShrink: 0 }}
             >
+
               {/* Checkbox */}
               <button
                 onPointerDown={(e) => e.stopPropagation()}
@@ -201,14 +202,18 @@ export function TodoWidget({ size }: { size: Size }) {
               )}
             </div>
           ))}
-        </div>
 
-        <form onSubmit={add} onPointerDown={(e) => e.stopPropagation()}
-          style={{ flexShrink: 0, display: size.h < 2 ? 'none' : 'flex', alignItems: 'center', gap: 8, paddingTop: 8, marginTop: 4 }}>
-          <button type="submit" style={{ background: 'var(--chip)', border: '.5px solid var(--rule)', borderRadius: 6, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--ink-mute)', fontSize: 16, lineHeight: 1, flexShrink: 0, padding: 0 }}>+</button>
-          <input value={newText} onChange={(e) => setNewText(e.target.value)} placeholder="新しいタスクを追加"
-            style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit', fontSize: 12 }} />
-        </form>
+          {/* 追加フォーム: リストの末尾アイテムとして同スタイルで表示 */}
+          <form onSubmit={add} onPointerDown={(e) => e.stopPropagation()}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', flexShrink: 0 }}>
+            <button type="submit"
+              style={{ width: 18, height: 18, borderRadius: 5, border: '1.5px dashed var(--rule-strong)', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', padding: 0, color: 'var(--ink-faint)', fontSize: 15, lineHeight: 1 }}>+</button>
+            <input value={newText} onChange={(e) => setNewText(e.target.value)}
+              onPointerDown={(e) => e.stopPropagation()}
+              placeholder="新しいタスクを追加"
+              style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit', fontSize: 13 }} />
+          </form>
+        </div>
       </div>
     </div>
   );
