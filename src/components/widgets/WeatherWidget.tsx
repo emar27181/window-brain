@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Head } from '../Head';
 import type { Size } from '../../types';
 
@@ -17,17 +17,27 @@ interface WeatherData {
   temp: number; apparent: number; code: number; wind: number;
   high: number; low: number; hourly: HourlyItem[];
 }
+interface Location { lat: number; lon: number; name: string }
 
-const LAT = 35.6762, LON = 139.6503;
+const LOC_KEY = 'wb.weather.location.v1';
+const DEFAULT_LOC: Location = { lat: 35.6762, lon: 139.6503, name: 'TOKYO' };
 
-async function fetchWeather(): Promise<WeatherData> {
+function loadLocation(): Location {
+  try {
+    const s = JSON.parse(localStorage.getItem(LOC_KEY) ?? 'null');
+    if (s?.lat && s?.lon && s?.name) return s;
+  } catch {}
+  return DEFAULT_LOC;
+}
+
+async function fetchWeather(lat: number, lon: number): Promise<WeatherData> {
   const r = await fetch(
     `https://api.open-meteo.com/v1/forecast?` +
-    `latitude=${LAT}&longitude=${LON}` +
+    `latitude=${lat}&longitude=${lon}` +
     `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m` +
     `&hourly=temperature_2m` +
     `&daily=temperature_2m_max,temperature_2m_min` +
-    `&timezone=Asia%2FTokyo&forecast_days=1`
+    `&timezone=auto&forecast_days=1`
   );
   const d = await r.json() as {
     current: { temperature_2m: number; apparent_temperature: number; weather_code: number; wind_speed_10m: number };
@@ -40,10 +50,7 @@ async function fetchWeather(): Promise<WeatherData> {
     .map((t, i) => ({ time: new Date(t), temp: Math.round(d.hourly.temperature_2m[i]) }))
     .filter(({ time }) => time >= now)
     .slice(0, 5)
-    .map(({ time, temp }, i) => ({
-      label: i === 0 ? 'NOW' : String(time.getHours()),
-      temp,
-    }));
+    .map(({ time, temp }, i) => ({ label: i === 0 ? 'NOW' : String(time.getHours()), temp }));
   return {
     temp: Math.round(c.temperature_2m),
     apparent: Math.round(c.apparent_temperature),
@@ -55,17 +62,33 @@ async function fetchWeather(): Promise<WeatherData> {
   };
 }
 
+async function geocode(query: string): Promise<Location | null> {
+  const r = await fetch(
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`
+  );
+  const d = await r.json() as { results?: Array<{ latitude: number; longitude: number; name: string }> };
+  const res = d.results?.[0];
+  if (!res) return null;
+  return { lat: res.latitude, lon: res.longitude, name: res.name.toUpperCase() };
+}
+
 export function WeatherWidget({ size }: { size: Size }) {
+  const [location, setLocation] = useState<Location>(loadLocation);
   const [data, setData] = useState<WeatherData | null>(null);
   const [err, setErr] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [input, setInput] = useState('');
+  const [geoErr, setGeoErr] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const big = size.w >= 2 && size.h >= 2;
 
   useEffect(() => {
     let alive = true;
+    setErr(false);
     const load = async () => {
       try {
-        const w = await fetchWeather();
-        if (alive) setData(w);
+        const w = await fetchWeather(location.lat, location.lon);
+        if (alive) { setData(w); setErr(false); }
       } catch {
         if (alive) setErr(true);
       }
@@ -73,11 +96,64 @@ export function WeatherWidget({ size }: { size: Size }) {
     load();
     const id = setInterval(load, 30 * 60 * 1000);
     return () => { alive = false; clearInterval(id); };
-  }, []);
+  }, [location]);
+
+  useEffect(() => {
+    if (editing) setTimeout(() => inputRef.current?.focus(), 30);
+  }, [editing]);
+
+  const startEdit = () => { setEditing(true); setInput(''); setGeoErr(false); };
+  const cancelEdit = () => { setEditing(false); setInput(''); setGeoErr(false); };
+
+  const applyLocation = async () => {
+    const q = input.trim();
+    if (!q) { cancelEdit(); return; }
+    const loc = await geocode(q);
+    if (loc) {
+      setLocation(loc);
+      try { localStorage.setItem(LOC_KEY, JSON.stringify(loc)); } catch {}
+      cancelEdit();
+    } else {
+      setGeoErr(true);
+    }
+  };
+
+  const locSlot = editing ? (
+    <form
+      onSubmit={(e) => { e.preventDefault(); applyLocation(); }}
+      onPointerDown={(e) => e.stopPropagation()}
+      style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+    >
+      <input
+        ref={inputRef}
+        value={input}
+        onChange={(e) => { setInput(e.target.value); setGeoErr(false); }}
+        onBlur={cancelEdit}
+        onKeyDown={(e) => { if (e.key === 'Escape') cancelEdit(); }}
+        onPointerDown={(e) => e.stopPropagation()}
+        placeholder="都市名…"
+        style={{
+          width: 72, background: 'var(--track)', border: `.5px solid ${geoErr ? '#ff6a7a' : 'var(--accent,#9aa6ff)'}`,
+          borderRadius: 5, padding: '2px 6px', color: 'inherit',
+          fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.1em',
+          outline: 'none', textTransform: 'uppercase',
+        }}
+      />
+    </form>
+  ) : (
+    <button
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={startEdit}
+      title="場所を変更"
+      style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.1em', color: 'var(--ink-faint)', padding: '1px 3px', borderRadius: 4 }}
+    >
+      {location.name}
+    </button>
+  );
 
   return (
     <div className="w-body">
-      <Head title="WEATHER" right={<span className="mono muted" style={{ fontSize: 10 }}>TOKYO</span>} />
+      <Head title="WEATHER" right={locSlot} />
       <div className="w-content" style={{ justifyContent: 'space-between', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: big ? 6 : 0, minWidth: 0, flexWrap: 'wrap' }}>
           <div className="mono" style={{ fontSize: big ? 56 : 38, fontWeight: 300, letterSpacing: '-.04em', lineHeight: 1 }}>
