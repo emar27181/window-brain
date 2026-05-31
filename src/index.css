@@ -359,3 +359,23 @@ body.density-cozy .grid{--gap:14px}
   /* dock ボタンの当たり判定を広げる */
   .dock button { min-width: 36px; min-height: 36px; }
 }
+
+/* ─── Mobile expand overlay ─────────────────────────────────────── */
+.wex-overlay{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.35);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+.wex-sheet{position:absolute;inset:0;display:flex;flex-direction:column;background:#0a0d14;overflow:hidden;animation:wex-in .26s cubic-bezier(.22,.7,.18,1)}
+body.theme-light .wex-sheet{background:#eceae4}
+@keyframes wex-in{from{transform:translateY(100%)}}
+.wex-bar{display:flex;align-items:center;gap:10px;padding:14px 16px;flex-shrink:0;border-bottom:.5px solid var(--rule)}
+.wex-back{background:none;border:none;color:var(--accent,#9aa6ff);cursor:pointer;padding:4px;display:flex;align-items:center;border-radius:6px;margin-right:2px}
+.wex-title{font-family:var(--font-mono);font-size:10px;letter-spacing:.18em;color:var(--ink-faint)}
+.wex-body{flex:1;min-height:0;position:relative;overflow:hidden}
+.wex-body .w-body{position:absolute;inset:0}
+.wex-settings{flex-shrink:0;padding:16px;display:flex;flex-direction:column;gap:14px;border-top:.5px solid var(--rule);max-height:42vh;overflow-y:auto}
+.wex-section{display:flex;flex-direction:column;gap:8px}
+.wex-section-label{font-family:var(--font-mono);font-size:9px;letter-spacing:.18em;color:var(--ink-faint);text-transform:uppercase}
+.wex-chips{display:flex;gap:8px;flex-wrap:wrap}
+.wex-color{width:24px;height:24px;border-radius:50%;border:2.5px solid transparent;cursor:pointer;padding:0;outline:none;transition:border-color .15s,transform .15s}
+.wex-color.on{border-color:rgba(255,255,255,.7);transform:scale(1.18)}
+body.theme-light .wex-color.on{border-color:rgba(0,0,0,.5)}
+.wex-chip{padding:5px 12px;border-radius:8px;background:var(--chip);border:.5px solid var(--rule);color:var(--ink-mute);font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;cursor:pointer;outline:none;transition:all .15s}
+.wex-chip.on{background:var(--accent,#9aa6ff);color:#0a0d14;border-color:transparent}
