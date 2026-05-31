@@ -8,7 +8,7 @@ import { WIDGET_REGISTRY, ALLOWED_SIZES } from './components/widgets';
 import { useTweaks } from './hooks/useTweaks';
 import { useViewport } from './hooks/useViewport';
 import { collides, reflowLayout, findFreeSlot, COLS, ROWS } from './lib/layout';
-import type { TweakValues, WidgetItem, AccentConfig, TypefaceConfig, DisplayFontConfig, BgOption, DragState, ResizeState } from './types';
+import type { TweakValues, WidgetItem, AccentConfig, TypefaceConfig, DisplayFontConfig, BgOption, DragState, ResizeState, WidgetSettings } from './types';
 
 // ─── Constants ────────────────────────────────────────────────────
 
@@ -105,6 +105,21 @@ export default function App() {
   const mobileOrderRef = useRef(mobileOrder);
   mobileOrderRef.current = mobileOrder;
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [mobileExpandId, setMobileExpandId] = useState<string | null>(null);
+
+  const WIDGET_SETTINGS_KEY = 'wb.widget.settings.v1';
+  const [widgetSettings, setWidgetSettings] = useState<Record<string, WidgetSettings>>(() => {
+    try { return JSON.parse(localStorage.getItem(WIDGET_SETTINGS_KEY) ?? '{}'); }
+    catch { return {}; }
+  });
+  const updateWidgetSetting = (id: string, key: keyof WidgetSettings, val: string | undefined) => {
+    setWidgetSettings((prev) => {
+      const next = { ...prev, [id]: { ...prev[id], [key]: val } };
+      if (val === undefined) delete next[id][key];
+      try { localStorage.setItem(WIDGET_SETTINGS_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
 
   // Apply theme / typography
   const accent = ACCENTS[t.accent] ?? ACCENTS.aurora;
@@ -234,24 +249,42 @@ export default function App() {
       return;
     }
 
-    // Long-press (500ms) to activate rearrange mode
-    const cancel = () => {
-      if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; }
-      window.removeEventListener('pointermove', onPreMove);
-      window.removeEventListener('pointerup', onPreUp);
-    };
-    const onPreMove = (ev: PointerEvent) => {
-      if (Math.abs(ev.clientX - startX) > 10 || Math.abs(ev.clientY - startY) > 10) cancel();
-    };
-    const onPreUp = () => cancel();
-    window.addEventListener('pointermove', onPreMove, { passive: true });
-    window.addEventListener('pointerup', onPreUp, { once: true });
+    const rect = el.getBoundingClientRect();
+    const inHeader = (e.clientY - rect.top) < 48;
 
-    longPressRef.current = setTimeout(() => {
-      window.removeEventListener('pointermove', onPreMove);
-      setMobileEditMode(true);
-      startMobileDrag(el, pointerId, startX, startY, itemId);
-    }, 500);
+    if (inHeader) {
+      // ヘッダー長押し(1000ms) → 並び替えモード開始
+      const cancel = () => {
+        if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; }
+        window.removeEventListener('pointermove', onPreMove as EventListener);
+        window.removeEventListener('pointerup', onPreUp);
+      };
+      const onPreMove = (ev: PointerEvent) => {
+        if (Math.abs(ev.clientX - startX) > 10 || Math.abs(ev.clientY - startY) > 10) cancel();
+      };
+      const onPreUp = () => cancel();
+      window.addEventListener('pointermove', onPreMove as EventListener, { passive: true });
+      window.addEventListener('pointerup', onPreUp);
+      longPressRef.current = setTimeout(() => {
+        window.removeEventListener('pointermove', onPreMove as EventListener);
+        window.removeEventListener('pointerup', onPreUp);
+        setMobileEditMode(true);
+        startMobileDrag(el, pointerId, startX, startY, itemId);
+      }, 1000);
+    } else {
+      // ボディタップ → 展開モーダル
+      let moved = false;
+      const onPreMove = (ev: PointerEvent) => {
+        if (Math.abs(ev.clientX - startX) > 10 || Math.abs(ev.clientY - startY) > 10) moved = true;
+      };
+      const onPreUp = () => {
+        window.removeEventListener('pointermove', onPreMove as EventListener);
+        window.removeEventListener('pointerup', onPreUp);
+        if (!moved) setMobileExpandId(itemId);
+      };
+      window.addEventListener('pointermove', onPreMove as EventListener, { passive: true });
+      window.addEventListener('pointerup', onPreUp);
+    }
   }, [mobileEditMode, startMobileDrag]);
 
   // ─── Grid metrics ─────────────────────────────────────────────
@@ -662,6 +695,70 @@ export default function App() {
         <TweakSection label="Layout" />
         <TweakButton label="レイアウトをリセット" onClick={resetLayout} />
       </TweaksPanel>
+
+      {/* ─── Mobile expand overlay ─────────────────────── */}
+      {isStacked && mobileExpandId && (() => {
+        const item = layout.find((i) => i.id === mobileExpandId);
+        const def = item && WIDGET_REGISTRY.find((w) => w.type === item.type);
+        if (!item || !def) return null;
+        const W = def.Component;
+        const ws = widgetSettings[mobileExpandId] ?? {};
+        const oa = ws.accent ? ACCENTS[ws.accent] : null;
+        const ot = ws.typeface ? TYPEFACES[ws.typeface] : null;
+        return (
+          <div className="wex-overlay" onClick={() => setMobileExpandId(null)}>
+            <div className="wex-sheet"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                '--accent': oa?.color ?? accent.color,
+                '--font-sans': ot?.sans ?? typeface.sans,
+                '--font-mono': ot?.mono ?? typeface.mono,
+              } as React.CSSProperties}
+            >
+              <div className="wex-bar">
+                <button className="wex-back" onClick={() => setMobileExpandId(null)}>
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path d="M12 5L7 10L12 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <span className="wex-title">{def.label.toUpperCase()}</span>
+              </div>
+              <div className="wex-body">
+                <div className="w-body">
+                  <W size={{ w: 8, h: 6 }} />
+                </div>
+              </div>
+              <div className="wex-settings">
+                <div className="wex-section">
+                  <div className="wex-section-label">ACCENT</div>
+                  <div className="wex-chips">
+                    {Object.entries(ACCENTS).map(([key, cfg]) => (
+                      <button key={key}
+                        className={`wex-color${(ws.accent === key) || (!ws.accent && t.accent === key) ? ' on' : ''}`}
+                        style={{ background: cfg.color }}
+                        onClick={() => updateWidgetSetting(mobileExpandId, 'accent', ws.accent === key ? undefined : key)}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="wex-section">
+                  <div className="wex-section-label">TYPEFACE</div>
+                  <div className="wex-chips">
+                    {Object.entries(TYPEFACES).map(([key, cfg]) => (
+                      <button key={key}
+                        className={`wex-chip${(ws.typeface === key) || (!ws.typeface && t.typeface === key) ? ' on' : ''}`}
+                        onClick={() => updateWidgetSetting(mobileExpandId, 'typeface', ws.typeface === key ? undefined : key)}
+                      >
+                        {cfg.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
