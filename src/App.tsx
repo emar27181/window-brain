@@ -168,8 +168,8 @@ export default function App() {
     });
   }, [layout]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Mobile drag-to-reorder
-  const startMobileDrag = useCallback((
+  // ─── Arrange panel drag ───────────────────────────────────────────
+  const startArrDrag = useCallback((
     el: HTMLElement, pointerId: number, startX: number, startY: number, itemId: string
   ) => {
     const rect = el.getBoundingClientRect();
@@ -177,14 +177,14 @@ export default function App() {
 
     const ghost = document.createElement('div');
     Object.assign(ghost.style, {
-      position: 'fixed', zIndex: '200', pointerEvents: 'none',
+      position: 'fixed', zIndex: '400', pointerEvents: 'none',
       width: rect.width + 'px', height: rect.height + 'px',
       left: rect.left + 'px', top: rect.top + 'px',
-      borderRadius: '18px', background: 'rgba(22,25,33,.78)',
-      border: '1px solid rgba(255,255,255,.28)',
-      boxShadow: '0 24px 60px rgba(0,0,0,.65)',
-      backdropFilter: 'blur(20px)',
-      transform: 'scale(1.06)', transition: 'none',
+      borderRadius: '12px', background: 'rgba(22,25,33,.92)',
+      border: '1.5px solid var(--accent, #9aa6ff)',
+      boxShadow: '0 12px 40px rgba(0,0,0,.55)',
+      backdropFilter: 'blur(10px)',
+      transform: 'scale(1.04)', transition: 'none',
     });
     document.body.appendChild(ghost);
     setMobileDragId(itemId);
@@ -200,9 +200,9 @@ export default function App() {
       const under = document.elementsFromPoint(ev.clientX, ev.clientY);
       ghost.style.visibility = 'visible';
       const hit = under.find(
-        (e) => (e as HTMLElement).dataset?.widgetId && (e as HTMLElement).dataset.widgetId !== itemId
+        (e) => (e as HTMLElement).dataset?.arrId && (e as HTMLElement).dataset.arrId !== itemId
       ) as HTMLElement | undefined;
-      const newSwapId = hit?.dataset.widgetId ?? null;
+      const newSwapId = hit?.dataset.arrId ?? null;
       if (newSwapId === currentSwapId) return;
       currentSwapId = newSwapId;
       setMobileSwapId(newSwapId);
@@ -238,54 +238,43 @@ export default function App() {
     el.addEventListener('pointercancel', onEnd);
   }, []);
 
-  const onMobileWidgetPointerDown = useCallback((e: React.PointerEvent, itemId: string) => {
-    if ((e.target as HTMLElement).closest('button,input,textarea')) return;
+  const onArrPointerDown = useCallback((e: React.PointerEvent, itemId: string) => {
+    if ((e.target as HTMLElement).closest('button')) return;
     const el = e.currentTarget as HTMLElement;
     const pointerId = e.pointerId, startX = e.clientX, startY = e.clientY;
 
-    if (mobileEditMode) {
-      e.preventDefault();
-      startMobileDrag(el, pointerId, startX, startY, itemId);
-      return;
-    }
+    const onPreMove = (ev: PointerEvent) => {
+      if (Math.abs(ev.clientX - startX) > 5 || Math.abs(ev.clientY - startY) > 5) {
+        window.removeEventListener('pointermove', onPreMove as EventListener);
+        window.removeEventListener('pointerup', onPreUp);
+        startArrDrag(el, pointerId, startX, startY, itemId);
+      }
+    };
+    const onPreUp = () => {
+      window.removeEventListener('pointermove', onPreMove as EventListener);
+      window.removeEventListener('pointerup', onPreUp);
+    };
+    window.addEventListener('pointermove', onPreMove as EventListener, { passive: true });
+    window.addEventListener('pointerup', onPreUp);
+  }, [startArrDrag]);
 
-    const rect = el.getBoundingClientRect();
-    const inHeader = (e.clientY - rect.top) < 48;
+  // メイン mobile grid: タップ → 展開モーダル のみ
+  const onMobileWidgetPointerDown = useCallback((e: React.PointerEvent, itemId: string) => {
+    if ((e.target as HTMLElement).closest('button,input,textarea')) return;
+    const startX = e.clientX, startY = e.clientY;
 
-    if (inHeader) {
-      // ヘッダー長押し(1000ms) → 並び替えモード開始
-      const cancel = () => {
-        if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; }
-        window.removeEventListener('pointermove', onPreMove as EventListener);
-        window.removeEventListener('pointerup', onPreUp);
-      };
-      const onPreMove = (ev: PointerEvent) => {
-        if (Math.abs(ev.clientX - startX) > 10 || Math.abs(ev.clientY - startY) > 10) cancel();
-      };
-      const onPreUp = () => cancel();
-      window.addEventListener('pointermove', onPreMove as EventListener, { passive: true });
-      window.addEventListener('pointerup', onPreUp);
-      longPressRef.current = setTimeout(() => {
-        window.removeEventListener('pointermove', onPreMove as EventListener);
-        window.removeEventListener('pointerup', onPreUp);
-        setMobileEditMode(true);
-        startMobileDrag(el, pointerId, startX, startY, itemId);
-      }, 1000);
-    } else {
-      // ボディタップ → 展開モーダル
-      let moved = false;
-      const onPreMove = (ev: PointerEvent) => {
-        if (Math.abs(ev.clientX - startX) > 10 || Math.abs(ev.clientY - startY) > 10) moved = true;
-      };
-      const onPreUp = () => {
-        window.removeEventListener('pointermove', onPreMove as EventListener);
-        window.removeEventListener('pointerup', onPreUp);
-        if (!moved) setMobileExpandId(itemId);
-      };
-      window.addEventListener('pointermove', onPreMove as EventListener, { passive: true });
-      window.addEventListener('pointerup', onPreUp);
-    }
-  }, [mobileEditMode, startMobileDrag]);
+    let moved = false;
+    const onPreMove = (ev: PointerEvent) => {
+      if (Math.abs(ev.clientX - startX) > 10 || Math.abs(ev.clientY - startY) > 10) moved = true;
+    };
+    const onPreUp = () => {
+      window.removeEventListener('pointermove', onPreMove as EventListener);
+      window.removeEventListener('pointerup', onPreUp);
+      if (!moved) setMobileExpandId(itemId);
+    };
+    window.addEventListener('pointermove', onPreMove as EventListener, { passive: true });
+    window.addEventListener('pointerup', onPreUp);
+  }, []);
 
   // ─── Grid metrics ─────────────────────────────────────────────
   const getMetrics = useCallback(() => {
@@ -519,11 +508,10 @@ export default function App() {
           <span className="dot"></span>
           {isStacked && (
             <button
-              onClick={() => { setMobileEditMode((m) => !m); setMobileDragId(null); setMobileSwapId(null); }}
-              style={{ background: mobileEditMode ? 'var(--chip-hover)' : 'transparent', borderRadius: 8 }}
+              onClick={() => { setMobileEditMode(true); setMobileDragId(null); setMobileSwapId(null); setMobilePreviewOrder(null); }}
               title="ウィジェットを並び替え"
             >
-              {mobileEditMode ? 'DONE' : '⠿'}
+              EDIT
             </button>
           )}
           <button onClick={() => setSettings(true)} title="設定">SETTINGS</button>
@@ -536,9 +524,9 @@ export default function App() {
 
       <div className="surface">
         {isStacked ? (
-          <div className={`mobile-grid${mobileEditMode ? ' is-rearranging' : ''}`}>
-            {((mobilePreviewOrder ?? mobileOrder).length > 0
-              ? (mobilePreviewOrder ?? mobileOrder).map((id) => layout.find((i) => i.id === id)).filter(Boolean) as WidgetItem[]
+          <div className="mobile-grid">
+            {(mobileOrder.length > 0
+              ? mobileOrder.map((id) => layout.find((i) => i.id === id)).filter(Boolean) as WidgetItem[]
               : [...layout].sort((a, b) => a.y - b.y || a.x - b.x)
             ).map((item) => {
               const def = WIDGET_REGISTRY.find((w) => w.type === item.type);
@@ -548,19 +536,14 @@ export default function App() {
               const H_MAP: Record<number, number> = { 1: 110, 2: 170, 3: 250, 4: 330 };
               const cellH = H_MAP[Math.min(item.h, 4)] ?? 170;
               const mobileSize = { w: span2 ? Math.max(item.w, 4) : 2, h: item.h };
-              const isDragging = mobileDragId === item.id;
-              const isSwap = mobileSwapId === item.id;
               return (
                 <div
                   key={item.id}
-                  data-widget-id={item.id}
-                  className={`w${span2 ? ' mg-span2' : ''}${isDragging ? ' mg-dragging' : ''}${isSwap ? ' mg-swap-target' : ''}`}
-                  style={{ height: cellH, opacity: isDragging ? 0.15 : 1, transition: 'opacity .15s, border-color .15s, box-shadow .15s' }}
+                  className={`w${span2 ? ' mg-span2' : ''}`}
+                  style={{ height: cellH }}
                   onPointerDown={(e) => onMobileWidgetPointerDown(e, item.id)}
-                  onContextMenu={(e) => { if (mobileEditMode) e.preventDefault(); }}
                 >
                   <W size={mobileSize} />
-                  <button className="close" onPointerDown={(e) => e.stopPropagation()} onClick={() => removeWidget(item.id)}>×</button>
                 </div>
               );
             })}
@@ -715,6 +698,7 @@ export default function App() {
                 '--font-mono': ot?.mono ?? typeface.mono,
               } as React.CSSProperties}
             >
+              <div className="wex-handle" onClick={() => setMobileExpandId(null)} />
               <div className="wex-bar">
                 <button className="wex-back" onClick={() => setMobileExpandId(null)}>
                   <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -759,6 +743,45 @@ export default function App() {
           </div>
         );
       })()}
+
+      {/* ─── Mobile arrange panel ──────────────────────────────── */}
+      {isStacked && mobileEditMode && (
+        <div className="arr-overlay">
+          <div className="arr-panel">
+            <div className="arr-bar">
+              <span className="arr-label">ARRANGE WIDGETS</span>
+              <button className="arr-done" onClick={() => { setMobileEditMode(false); setMobileDragId(null); setMobileSwapId(null); setMobilePreviewOrder(null); }}>
+                DONE
+              </button>
+            </div>
+            <div className="arr-grid">
+              {((mobilePreviewOrder ?? mobileOrder).length > 0
+                ? (mobilePreviewOrder ?? mobileOrder).map((id) => layout.find((i) => i.id === id)).filter(Boolean) as WidgetItem[]
+                : [...layout].sort((a, b) => a.y - b.y || a.x - b.x)
+              ).map((item) => {
+                const def = WIDGET_REGISTRY.find((w) => w.type === item.type);
+                if (!def) return null;
+                const span2 = item.w >= 4 || item.h >= 3;
+                const isDragging = mobileDragId === item.id;
+                const isTarget = mobileSwapId === item.id;
+                return (
+                  <div
+                    key={item.id}
+                    data-arr-id={item.id}
+                    className={`arr-tile${span2 ? ' arr-span2' : ''}${isDragging ? ' arr-dragging' : ''}${isTarget ? ' arr-target' : ''}`}
+                    onPointerDown={(e) => onArrPointerDown(e, item.id)}
+                  >
+                    <span className="arr-handle">⠿</span>
+                    <span className="arr-name">{def.label}</span>
+                    <span className="arr-size">{item.w}×{item.h}</span>
+                    <button className="arr-remove" onPointerDown={(e) => e.stopPropagation()} onClick={() => removeWidget(item.id)}>×</button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
