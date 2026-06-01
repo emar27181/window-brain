@@ -318,9 +318,16 @@ export default function App() {
       }
     };
 
+    let dragStarted = false;
+
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
+      if (!dragStarted) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        dragStarted = true;
+        tryReflow(origX, origY);
+      }
       const tgtX = Math.round(origX - 1 + dx / (m.cellW + m.gap)) + 1;
       const tgtY = Math.round(origY - 1 + dy / (m.cellH + m.gap)) + 1;
       const cx = Math.max(1, Math.min(COLS - item.w + 1, tgtX));
@@ -338,7 +345,6 @@ export default function App() {
         return null;
       });
     };
-    tryReflow(origX, origY);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   };
