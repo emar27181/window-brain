@@ -1,32 +1,143 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 const STORAGE_KEY = 'wb.widget.youtube.v1';
-const DEFAULT_ID = 'jfKfPfyJRdk'; // lofi girl 24/7
+const RESUME_KEY  = 'wb.widget.youtube.resume.v1';
+const DEFAULT_V   = 'jfKfPfyJRdk';
 
-function parseYouTubeId(input: string): string | null {
-  const s = input.trim();
-  const m = s.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-  if (m) return m[1];
-  if (/^[a-zA-Z0-9_-]{11}$/.test(s)) return s;
-  return null;
+interface Embed { v?: string; list?: string }
+
+function loadEmbed(): Embed {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { v: DEFAULT_V };
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'string' ? { v: parsed } : (parsed as Embed);
+  } catch { return { v: DEFAULT_V }; }
 }
 
-function loadVideoId(): string {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') ?? DEFAULT_ID; }
-  catch { return DEFAULT_ID; }
+function parseEmbed(input: string): Embed | null {
+  const s = input.trim();
+  const listM = s.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+  const list = listM?.[1];
+  const videoM = s.match(/(?:youtube\.com\/(?:watch\?v=|embed\/(?!videoseries)|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  const v = videoM?.[1] ?? (/^[a-zA-Z0-9_-]{11}$/.test(s) ? s : undefined);
+  if (!v && !list) return null;
+  return { v, list };
+}
+
+function loadResume(videoId: string): number {
+  try {
+    const saved = JSON.parse(localStorage.getItem(RESUME_KEY) ?? '{}') as Record<string, number>;
+    const t = Number(saved[videoId] ?? 0);
+    return t > 5 && t < 86400 ? t : 0;
+  } catch { return 0; }
+}
+
+function saveResume(videoId: string, t: number) {
+  if (!(t > 5 && t < 86400)) return;
+  try {
+    const saved = JSON.parse(localStorage.getItem(RESUME_KEY) ?? '{}') as Record<string, number>;
+    saved[videoId] = Math.floor(t);
+    localStorage.setItem(RESUME_KEY, JSON.stringify(saved));
+  } catch {}
+}
+
+// Singleton: load YouTube IFrame API once
+let _ytPromise: Promise<void> | null = null;
+function loadYTApi(): Promise<void> {
+  if (_ytPromise) return _ytPromise;
+  _ytPromise = new Promise<void>((resolve) => {
+    if ((window as any).YT?.Player) { resolve(); return; }
+    const prev = (window as any).onYouTubeIframeAPIReady;
+    (window as any).onYouTubeIframeAPIReady = () => { if (typeof prev === 'function') prev(); resolve(); };
+    const s = document.createElement('script');
+    s.src = 'https://www.youtube.com/iframe_api';
+    s.async = true;
+    s.onerror = () => resolve(); // resolve anyway, player creation will fail gracefully
+    document.head.appendChild(s);
+  });
+  return _ytPromise;
 }
 
 export function YouTubeWidget() {
-  const [videoId, setVideoId] = useState(loadVideoId);
-  const [editing, setEditing] = useState(false);
-  const [input, setInput] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [embed, setEmbed] = useState<Embed>(loadEmbed);
+  const [editing, setEditing]   = useState(false);
+  const [input, setInput]       = useState('');
+  const inputRef    = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const playerRef   = useRef<any>(null);
+  const tickRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const videoId  = embed.v;
+    const startSec = videoId ? loadResume(videoId) : 0;
+    let alive = true;
+
+    const stopTick = () => { if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; } };
+
+    const startTick = (vid: string) => {
+      stopTick();
+      tickRef.current = setInterval(() => {
+        try { const t = playerRef.current?.getCurrentTime?.() ?? 0; saveResume(vid, t); } catch {}
+      }, 5000);
+    };
+
+    loadYTApi().then(() => {
+      if (!alive || !containerRef.current) return;
+      const YT = (window as any).YT;
+      if (!YT?.Player) return;
+
+      // Clear previous player content
+      if (playerRef.current) { try { playerRef.current.destroy(); } catch {} playerRef.current = null; }
+      containerRef.current.innerHTML = '';
+      const inner = document.createElement('div');
+      containerRef.current.appendChild(inner);
+
+      const vars: Record<string, unknown> = { autoplay: 1, start: Math.floor(startSec) };
+      if (embed.list) { vars.list = embed.list; vars.listType = 'playlist'; }
+
+      playerRef.current = new YT.Player(inner, {
+        width: '100%', height: '100%',
+        videoId: embed.v,
+        playerVars: vars,
+        events: {
+          onStateChange: (e: { data: number }) => {
+            if (e.data === 1 && videoId) startTick(videoId); // playing
+            else stopTick();
+          },
+        },
+      });
+    });
+
+    return () => {
+      alive = false;
+      stopTick();
+      try {
+        const t = playerRef.current?.getCurrentTime?.() ?? 0;
+        if (videoId) saveResume(videoId, t);
+        playerRef.current?.destroy?.();
+      } catch {}
+      playerRef.current = null;
+    };
+  }, [embed]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // F5 対策: ページを離れる直前に再生位置を保存
+  useEffect(() => {
+    if (!embed.v) return;
+    const videoId = embed.v;
+    const onUnload = () => {
+      try { const t = playerRef.current?.getCurrentTime?.() ?? 0; saveResume(videoId, t); } catch {}
+    };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, [embed.v]);
 
   const applyUrl = () => {
-    const id = parseYouTubeId(input);
-    if (id) {
-      setVideoId(id);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(id)); } catch {}
+    const next = parseEmbed(input);
+    if (next) {
+      setEmbed(next);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
     }
     setEditing(false);
     setInput('');
@@ -64,13 +175,13 @@ export function YouTubeWidget() {
           onPointerDown={(e) => e.stopPropagation()}
           style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(8,10,16,.88)', backdropFilter: 'blur(12px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24 }}
         >
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.18em', color: 'rgba(255,255,255,.55)' }}>YOUTUBE URL / VIDEO ID</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.18em', color: 'rgba(255,255,255,.55)' }}>YOUTUBE URL / VIDEO ID / PLAYLIST</div>
           <input
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') applyUrl(); if (e.key === 'Escape') setEditing(false); }}
-            placeholder="https://youtu.be/..."
+            placeholder="https://youtu.be/... or playlist URL"
             style={{ width: '100%', background: 'rgba(255,255,255,.08)', border: '.5px solid rgba(255,255,255,.25)', borderRadius: 8, padding: '9px 12px', color: '#fff', font: 'inherit', fontSize: 13, outline: 'none' }}
           />
           <div style={{ display: 'flex', gap: 8 }}>
@@ -80,13 +191,8 @@ export function YouTubeWidget() {
         </div>
       )}
 
-      <iframe
-        src={`https://www.youtube.com/embed/${videoId}?autoplay=1`}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowFullScreen
-        title="YouTube player"
-      />
+      {/* YT player mounts here — YouTube API replaces this div with an iframe */}
+      <div ref={containerRef} className="yt-player" style={{ position: 'absolute', inset: 0 }} />
     </div>
   );
 }
