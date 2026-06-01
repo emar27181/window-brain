@@ -573,6 +573,7 @@ export default function App() {
           </div>
         ) : (
           <div className={`grid ${drag ? 'is-editing' : ''}`} ref={gridRef}>
+            {drag && <div className="drag-overlay" />}
             {drag && (
               <div className={`ghost ${drag.valid ? '' : 'invalid'}`} style={cellStyle(drag.gx, drag.gy, drag.w, drag.h)} />
             )}
