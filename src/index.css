@@ -288,9 +288,14 @@ body.theme-light .muted{color:rgba(60,60,80,.55)}
 .md-preview th{background:var(--track);font-weight:500;font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase}
 ::selection{background:var(--accent,#9aa6ff);color:#0a0d14}
 
+/* YouTube IFrame API で生成される iframe をコンテナに合わせる */
+.yt-player > iframe { position: absolute; inset: 0; width: 100% !important; height: 100% !important; border: none; }
+
 /* Prevent iframes from blocking drag/resize pointer events */
 .grid.is-editing .w iframe,
 .w.resizing iframe { pointer-events: none; }
+/* Transparent overlay absorbs pointer events during drag without touching iframes */
+.drag-overlay { position: absolute; inset: 0; z-index: 25; cursor: grabbing; }
 
 /* Density */
 body.density-compact .surface{padding:0 14px 40px}
