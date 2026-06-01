@@ -87,6 +87,7 @@ export default function App() {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [resize, setResize] = useState<ResizeState | null>(null);
   const [toast, setToast] = useState<{ msg: string; kind: string } | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const vw = useViewport();
@@ -154,6 +155,21 @@ export default function App() {
   // Persist layout
   const saveLayout = (l: WidgetItem[]) => {
     try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(l)); } catch {}
+  };
+
+  // ─── Fullscreen ───────────────────────────────────────────────
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
   };
 
   // Sync mobileOrder when layout changes
@@ -520,6 +536,7 @@ export default function App() {
               EDIT
             </button>
           )}
+          <button onClick={toggleFullscreen} title={isFullscreen ? '全画面を終了' : '全画面表示'}>{isFullscreen ? 'EXIT FULLSCREEN' : 'FULLSCREEN'}</button>
           <button onClick={() => setSettings(true)} title="設定">SETTINGS</button>
           <button className="add" onClick={() => setPicker(true)}>
             <span className="plus">+</span><span>ADD</span>
