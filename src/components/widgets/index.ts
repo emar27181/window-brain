@@ -20,6 +20,7 @@ import { ForexWidget } from './ForexWidget';
 import { RssWidget } from './RssWidget';
 import { StickyWidget } from './StickyWidget';
 import { FocusWidget } from './FocusWidget';
+import { DayCalendarWidget } from './DayCalendarWidget';
 
 export const WIDGET_REGISTRY: WidgetDef[] = [
   { type: 'clock',     label: '時計',         Component: ClockWidget,      defaultSize: { w: 2, h: 2 } },
@@ -43,6 +44,7 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { type: 'rss',       label: 'RSS',          Component: RssWidget,        defaultSize: { w: 3, h: 2 } },
   { type: 'sticky',    label: '付箋',         Component: StickyWidget,     defaultSize: { w: 2, h: 2 } },
   { type: 'focus',     label: '集中タイマー', Component: FocusWidget,      defaultSize: { w: 2, h: 2 } },
+  { type: 'daycal',   label: '一日カレンダー', Component: DayCalendarWidget, defaultSize: { w: 2, h: 4 } },
 ];
 
 // 全幅(1〜13) × 全高(1〜6) の任意サイズを許可
@@ -59,5 +61,5 @@ export {
   TokensWidget, YouTubeWidget, NowPlayingWidget, MarketsWidget,
   PomodoroWidget, GithubWidget, SystemWidget,
   CountdownWidget, HabitWidget, MoodWidget, BooksWidget, WorkoutWidget,
-  ForexWidget, RssWidget, StickyWidget, FocusWidget,
+  ForexWidget, RssWidget, StickyWidget, FocusWidget, DayCalendarWidget,
 };
