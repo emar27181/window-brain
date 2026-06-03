@@ -1,23 +1,55 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Head } from '../Head';
 import type { Size } from '../../types';
 
-const TODOS_KEY = 'wb.todos.v1';
+// ─── Storage keys ─────────────────────────────────────────────────
+
+const TODOS_KEY           = 'wb.todos.v2';
+const TODOS_LEGACY_KEY    = 'wb.todos.v1';
+const TODOIST_TOKEN_KEY   = 'wb.todoist.token';
+
+// ─── Types ────────────────────────────────────────────────────────
 
 export interface Todo {
   id: number;
   text: string;
   done: boolean;
-  createdAt: string;    // ISO 8601
-  completedAt?: string; // ISO 8601、完了時に設定
+  createdAt: string;
+  completedAt?: string;
+  category?: string;
+  dueDate?: string;      // "YYYY-MM-DD"
+  source?: 'local' | 'todoist';
+  externalId?: string;
 }
 
-const DEFAULT_TODOS: Todo[] = [
-  { id: 1, text: 'デザインシステムの整理', done: false, createdAt: new Date().toISOString() },
-  { id: 2, text: 'ウィジェット v2 レビュー', done: false, createdAt: new Date().toISOString() },
-  { id: 3, text: 'リサイズの当たり判定検証', done: true, createdAt: new Date().toISOString(), completedAt: new Date().toISOString() },
-  { id: 4, text: '夕方ミーティング', done: false, createdAt: new Date().toISOString() },
-];
+// ─── Categories ───────────────────────────────────────────────────
+
+const CATS = [
+  { id: 'work',     label: '仕事',  color: 'var(--accent)' },
+  { id: 'personal', label: '個人',  color: '#4fffb0' },
+  { id: 'study',    label: '学習',  color: '#60b8ff' },
+  { id: 'other',    label: 'その他', color: '#ffb347' },
+] as const;
+type CatId = typeof CATS[number]['id'];
+
+// ─── Date helpers ─────────────────────────────────────────────────
+
+function localDateStr(offsetDays = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function dueBadge(due: string): { label: string; color: string } {
+  const today = localDateStr();
+  if (due < today)           return { label: '期限切れ', color: '#ff6a7a' };
+  if (due === today)         return { label: '今日',    color: 'var(--accent)' };
+  if (due === localDateStr(1)) return { label: '明日',  color: '#ffb347' };
+  const [, m, d] = due.split('-');
+  return { label: `${parseInt(m)}/${parseInt(d)}`, color: 'var(--ink-mute)' };
+}
+
+// ─── Persistence ──────────────────────────────────────────────────
 
 function migrateItem(raw: Record<string, unknown>): Todo {
   const id = Number(raw.id) || Date.now();
@@ -25,101 +57,200 @@ function migrateItem(raw: Record<string, unknown>): Todo {
     id,
     text: String(raw.text ?? ''),
     done: Boolean(raw.done),
-    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date(id > 1e12 ? id : Date.now()).toISOString(),
+    createdAt: typeof raw.createdAt === 'string'
+      ? raw.createdAt : new Date(id > 1e12 ? id : Date.now()).toISOString(),
     completedAt: typeof raw.completedAt === 'string' ? raw.completedAt : undefined,
+    category: typeof raw.category === 'string' ? raw.category : undefined,
+    dueDate: typeof raw.dueDate === 'string' ? raw.dueDate : undefined,
+    source: raw.source === 'todoist' ? 'todoist' : 'local',
+    externalId: typeof raw.externalId === 'string' ? raw.externalId : undefined,
   };
 }
 
 function loadTodos(): Todo[] {
-  try {
-    const p = JSON.parse(localStorage.getItem(TODOS_KEY) ?? 'null');
-    if (Array.isArray(p)) return p.map(migrateItem);
-  } catch {}
-  return DEFAULT_TODOS;
+  for (const key of [TODOS_KEY, TODOS_LEGACY_KEY]) {
+    try {
+      const p = JSON.parse(localStorage.getItem(key) ?? 'null');
+      if (Array.isArray(p) && p.length) return p.map(migrateItem);
+    } catch {}
+  }
+  return [];
 }
 
-function fmtDate(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const dayMs   = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  if (dayMs === todayMs) return d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
-  if (dayMs === todayMs - 86400000) return '昨日';
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+function saveTodos(items: Todo[]) {
+  try { localStorage.setItem(TODOS_KEY, JSON.stringify(items)); } catch {}
 }
 
-function exportTodos(items: Todo[]) {
+function exportJSON(items: Todo[]) {
   const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json; charset=utf-8' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `tasks-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
+  Object.assign(document.createElement('a'), {
+    href: url,
+    download: `tasks-${localDateStr()}.json`,
+  }).click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// ─── Todoist API ──────────────────────────────────────────────────
+
+async function todoistFetch(token: string): Promise<Todo[]> {
+  const r = await fetch('https://api.todoist.com/rest/v2/tasks', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const data = await r.json() as Array<{
+    id: string; content: string; is_completed: boolean;
+    due?: { date: string };
+  }>;
+  return data.map(t => ({
+    id: parseInt(t.id, 10) || Date.now(),
+    text: t.content,
+    done: t.is_completed,
+    createdAt: new Date().toISOString(),
+    dueDate: t.due?.date,
+    source: 'todoist' as const,
+    externalId: t.id,
+  }));
+}
+
+async function todoistClose(token: string, id: string) {
+  await fetch(`https://api.todoist.com/rest/v2/tasks/${id}/close`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+async function todoistReopen(token: string, id: string) {
+  await fetch(`https://api.todoist.com/rest/v2/tasks/${id}/reopen`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// ─── Component ────────────────────────────────────────────────────
+
 export function TodoWidget({ size }: { size: Size }) {
-  const [items, setItems] = useState<Todo[]>(loadTodos);
-  const [newText, setNewText] = useState('');
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editText, setEditText] = useState('');
-  const editInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [items, setItems]         = useState<Todo[]>(loadTodos);
+  const [newText, setNewText]     = useState('');
+  const [newDue, setNewDue]       = useState('');
+  const [newCat, setNewCat]       = useState('');
+  const [filterCat, setFilterCat] = useState('');
+  const [editId, setEditId]       = useState<number | null>(null);
+  const [editText, setEditText]   = useState('');
+  const [editDue, setEditDue]     = useState('');
+  const editRef  = useRef<HTMLInputElement>(null);
+  const fileRef  = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    try { localStorage.setItem(TODOS_KEY, JSON.stringify(items)); } catch {}
-  }, [items]);
+  // Todoist
+  const [token, setToken]           = useState(() => localStorage.getItem(TODOIST_TOKEN_KEY) ?? '');
+  const [tdItems, setTdItems]       = useState<Todo[]>([]);
+  const [tdLoading, setTdLoading]   = useState(false);
+  const [tdErr, setTdErr]           = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+  const [tokenInput, setTokenInput]     = useState('');
 
+  // ── Persist local ──
+  useEffect(() => { saveTodos(items); }, [items]);
+
+  // ── External event ──
   useEffect(() => {
     const onUpdate = () => setItems(loadTodos());
     window.addEventListener('wb:data-updated', onUpdate);
     return () => window.removeEventListener('wb:data-updated', onUpdate);
   }, []);
 
-  const toggle = (id: number) => {
+  // ── Todoist sync ──
+  const syncTodoist = useCallback(async (t: string) => {
+    if (!t) return;
+    setTdLoading(true); setTdErr('');
+    try { setTdItems(await todoistFetch(t)); }
+    catch (e) { setTdErr(e instanceof Error ? e.message : 'Error'); }
+    finally { setTdLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (!token) { setTdItems([]); return; }
+    syncTodoist(token);
+    const id = setInterval(() => syncTodoist(token), 5 * 60_000);
+    return () => clearInterval(id);
+  }, [token, syncTodoist]);
+
+  // ── Merged & sorted ──
+  const allItems = [...items, ...tdItems];
+  const catCounts = Object.fromEntries(
+    CATS.map(c => [c.id, allItems.filter(i => i.category === c.id && !i.done).length])
+  );
+  const usedCats = CATS.filter(c => allItems.some(i => i.category === c.id));
+
+  const visible = (filterCat ? allItems.filter(i => i.category === filterCat) : allItems)
+    .sort((a, b) => {
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+      if (a.dueDate) return -1; if (b.dueDate) return 1;
+      return 0;
+    });
+
+  const doneCount = allItems.filter(i => i.done).length;
+
+  // ── Actions ──
+  const toggle = async (id: number) => {
+    const item = allItems.find(i => i.id === id);
+    if (!item) return;
     const now = new Date().toISOString();
-    setItems((prev) => prev.map((i) => {
-      if (i.id !== id) return i;
-      const willBeDone = !i.done;
-      return { ...i, done: willBeDone, completedAt: willBeDone ? now : undefined };
-    }));
+    if (item.source === 'todoist' && item.externalId && token) {
+      const next = !item.done;
+      setTdItems(p => p.map(i => i.id === id ? { ...i, done: next, completedAt: next ? now : undefined } : i));
+      try { next ? await todoistClose(token, item.externalId) : await todoistReopen(token, item.externalId); } catch {}
+    } else {
+      setItems(p => p.map(i => {
+        if (i.id !== id) return i;
+        const next = !i.done;
+        return { ...i, done: next, completedAt: next ? now : undefined };
+      }));
+    }
   };
 
-  const remove = (id: number) => setItems((prev) => prev.filter((i) => i.id !== id));
+  const remove = (id: number) => {
+    if (allItems.find(i => i.id === id)?.source === 'todoist')
+      setTdItems(p => p.filter(i => i.id !== id));
+    else
+      setItems(p => p.filter(i => i.id !== id));
+  };
 
   const startEdit = (item: Todo) => {
-    setEditingId(item.id);
-    setEditText(item.text);
-    setTimeout(() => editInputRef.current?.focus(), 20);
+    setEditId(item.id); setEditText(item.text); setEditDue(item.dueDate ?? '');
+    setTimeout(() => editRef.current?.focus(), 20);
   };
 
   const saveEdit = () => {
-    if (editingId !== null) {
-      const text = editText.trim();
-      if (text) setItems((prev) => prev.map((i) => i.id === editingId ? { ...i, text } : i));
+    if (editId !== null) {
+      const t = editText.trim();
+      if (t) setItems(p => p.map(i => i.id === editId ? { ...i, text: t, dueDate: editDue || undefined } : i));
     }
-    setEditingId(null); setEditText('');
+    setEditId(null);
   };
-
-  const cancelEdit = () => { setEditingId(null); setEditText(''); };
 
   const add = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newText.trim()) return;
-    setItems((prev) => [{ id: Date.now(), text: newText.trim(), done: false, createdAt: new Date().toISOString() }, ...prev]);
-    setNewText('');
+    setItems(p => [{
+      id: Date.now(), text: newText.trim(), done: false,
+      createdAt: new Date().toISOString(),
+      category: newCat || undefined,
+      dueDate: newDue || undefined,
+      source: 'local',
+    }, ...p]);
+    setNewText(''); setNewDue(''); setNewCat('');
   };
 
-  const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; e.target.value = '';
-    if (!file) return;
-    try {
-      const data = JSON.parse(await file.text());
-      if (Array.isArray(data)) setItems(data.map(migrateItem));
-    } catch { alert('読み込みに失敗しました'); }
+  const saveSettings = () => {
+    const t = tokenInput.trim();
+    localStorage.setItem(TODOIST_TOKEN_KEY, t);
+    setToken(t); setShowSettings(false);
+    if (!t) setTdItems([]);
   };
 
-  const done = items.filter((i) => i.done).length;
+  const catColor = (id: string) => CATS.find(c => c.id === id)?.color ?? 'var(--ink-faint)';
 
   return (
     <div className="w-body">
@@ -127,94 +258,208 @@ export function TodoWidget({ size }: { size: Size }) {
         title="TASKS"
         editable
         right={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="mono muted" style={{ fontSize: 10 }}>{done}/{items.length}</span>
-            <button onPointerDown={(e) => e.stopPropagation()} onClick={() => exportTodos(items)}
-              style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, padding: '2px 3px' }} title="エクスポート">↑</button>
-            <button onPointerDown={(e) => e.stopPropagation()} onClick={() => fileInputRef.current?.click()}
-              style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, padding: '2px 3px' }} title="インポート">↓</button>
-            <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={onImportFile} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span className="mono muted" style={{ fontSize: 10 }}>{doneCount}/{allItems.length}</span>
+            {token && (
+              <button onPointerDown={e => e.stopPropagation()} onClick={() => syncTodoist(token)}
+                style={hdrBtn(tdLoading)}>
+                {tdLoading ? '⟳' : 'T'}
+              </button>
+            )}
+            <button onPointerDown={e => e.stopPropagation()}
+              onClick={() => { setTokenInput(token); setShowSettings(true); }}
+              style={hdrBtn(false)}>⚙</button>
+            <button onPointerDown={e => e.stopPropagation()} onClick={() => exportJSON(items)}
+              style={hdrBtn(false)} title="エクスポート">↑</button>
+            <button onPointerDown={e => e.stopPropagation()} onClick={() => fileRef.current?.click()}
+              style={hdrBtn(false)} title="インポート">↓</button>
+            <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }}
+              onChange={async e => {
+                const f = e.target.files?.[0]; e.target.value = '';
+                if (!f) return;
+                try { const d = JSON.parse(await f.text()); if (Array.isArray(d)) setItems(d.map(migrateItem)); }
+                catch { alert('読み込みに失敗しました'); }
+              }} />
           </div>
         }
       />
 
+      {/* ── Settings overlay ── */}
+      {showSettings && (
+        <div onPointerDown={e => e.stopPropagation()}
+          style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(8,10,16,.94)', backdropFilter: 'blur(12px)', borderRadius: 18, display: 'flex', flexDirection: 'column', gap: 14, padding: 18, overflow: 'auto' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.18em', color: 'rgba(255,255,255,.45)' }}>TASKS SETTINGS</div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.14em', color: 'rgba(255,255,255,.35)' }}>TODOIST API TOKEN</div>
+            <input type="password" placeholder="トークンを貼り付け" value={tokenInput}
+              onChange={e => setTokenInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') saveSettings(); if (e.key === 'Escape') setShowSettings(false); }}
+              autoFocus
+              style={{ background: 'rgba(255,255,255,.07)', border: '.5px solid rgba(255,255,255,.18)', borderRadius: 8, padding: '7px 10px', color: '#fff', font: 'inherit', fontSize: 12, outline: 'none' }} />
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'rgba(255,255,255,.28)', lineHeight: 1.6 }}>
+              Todoist アプリ → 設定 → 連携 → API トークン
+            </div>
+            {tdErr && <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: '#ff6a7a' }}>Error: {tdErr}</div>}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={saveSettings}
+              style={overlayBtn('var(--accent)', '#0a0d14')}>保存</button>
+            <button onClick={() => setShowSettings(false)}
+              style={overlayBtn('rgba(255,255,255,.08)', 'rgba(255,255,255,.7)')}>CANCEL</button>
+            {token && (
+              <button onClick={() => setTokenInput('')}
+                style={overlayBtn('transparent', '#ff6a7a', '.5px solid rgba(255,100,100,.3)')}>連携解除</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Category filter ── */}
+      {usedCats.length > 0 && (
+        <div onPointerDown={e => e.stopPropagation()}
+          style={{ display: 'flex', gap: 3, padding: '4px 0 3px', flexShrink: 0, flexWrap: 'wrap' }}>
+          <button onClick={() => setFilterCat('')} style={filterBtn(filterCat === '')}>ALL</button>
+          {usedCats.map(cat => (
+            <button key={cat.id} onClick={() => setFilterCat(filterCat === cat.id ? '' : cat.id)}
+              style={{ ...filterBtn(filterCat === cat.id), display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: cat.color }} />
+              <span>{cat.label}</span>
+              {catCounts[cat.id] > 0 && <span style={{ color: cat.color, opacity: .85 }}>{catCounts[cat.id]}</span>}
+            </button>
+          ))}
+          {token && tdItems.length > 0 && (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '.1em', color: '#e44332', opacity: .65, padding: '3px 6px', border: '.5px solid var(--rule)', borderRadius: 5, alignSelf: 'center' }}>
+              ● T {tdItems.filter(i => !i.done).length}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="w-content" style={{ gap: 0, overflow: 'hidden', minHeight: 0 }}>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingRight: 2 }}>
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="todo-row"
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '.5px solid var(--rule)', flexShrink: 0 }}
-            >
+
+          {visible.map(item => (
+            <div key={item.id} className="todo-row"
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 0', borderBottom: '.5px solid var(--rule)', flexShrink: 0 }}>
+
+              {/* Category dot */}
+              {item.category && (
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: catColor(item.category), flexShrink: 0 }} />
+              )}
 
               {/* Checkbox */}
-              <button
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={() => toggle(item.id)}
-                style={{ width: 18, height: 18, borderRadius: 5, border: '1.5px solid var(--rule-strong)', background: item.done ? 'var(--accent,#9aa6ff)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .15s', cursor: 'pointer', padding: 0 }}
-              >
+              <button onPointerDown={e => e.stopPropagation()} onClick={() => toggle(item.id)}
+                style={{ width: 15, height: 15, borderRadius: 4, flexShrink: 0, cursor: 'pointer', padding: 0, border: item.source === 'todoist' ? '1.5px solid #e44332' : '1.5px solid var(--rule-strong)', background: item.done ? (item.source === 'todoist' ? '#e44332' : 'var(--accent)') : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {item.done && (
-                  <svg width="10" height="10" viewBox="0 0 10 10">
+                  <svg width="8" height="8" viewBox="0 0 10 10">
                     <path d="M1.5 5L4 7.5L8.5 2" stroke="#0a0d14" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 )}
               </button>
 
-              {editingId === item.id ? (
+              {editId === item.id ? (
                 <>
-                  <input
-                    ref={editInputRef}
-                    value={editText}
-                    onChange={(e) => setEditText(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    style={{ flex: 1, minWidth: 0, background: 'var(--track)', border: '.5px solid var(--accent,#9aa6ff)', borderRadius: 6, padding: '3px 8px', color: 'inherit', font: 'inherit', fontSize: 13, outline: 'none' }}
-                  />
-                  <button onPointerDown={(e) => e.stopPropagation()} onClick={saveEdit}
-                    style={{ background: 'var(--accent,#9aa6ff)', border: 'none', borderRadius: 5, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: '#0a0d14', fontSize: 13, fontWeight: 600 }}>✓</button>
-                  <button onPointerDown={(e) => e.stopPropagation()} onClick={cancelEdit}
-                    style={{ background: 'var(--chip)', border: 'none', borderRadius: 5, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: 'var(--ink-mute)', fontSize: 13 }}>✕</button>
+                  <input ref={editRef} value={editText}
+                    onChange={e => setEditText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditId(null); }}
+                    onPointerDown={e => e.stopPropagation()}
+                    style={{ flex: 1, minWidth: 0, background: 'var(--track)', border: '.5px solid var(--accent)', borderRadius: 5, padding: '2px 6px', color: 'inherit', font: 'inherit', fontSize: 12, outline: 'none' }} />
+                  <input type="date" value={editDue} onChange={e => setEditDue(e.target.value)}
+                    onPointerDown={e => e.stopPropagation()}
+                    style={{ width: 96, background: 'var(--track)', border: '.5px solid var(--rule)', borderRadius: 5, padding: '2px 4px', color: 'inherit', font: 'inherit', fontSize: 9, outline: 'none', colorScheme: 'dark' }} />
+                  <button onPointerDown={e => e.stopPropagation()} onClick={saveEdit}
+                    style={{ background: 'var(--accent)', border: 'none', borderRadius: 4, width: 18, height: 18, cursor: 'pointer', flexShrink: 0, color: '#0a0d14', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</button>
+                  <button onPointerDown={e => e.stopPropagation()} onClick={() => setEditId(null)}
+                    style={{ background: 'var(--chip)', border: 'none', borderRadius: 4, width: 18, height: 18, cursor: 'pointer', flexShrink: 0, color: 'var(--ink-mute)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>✕</button>
                 </>
               ) : (
                 <>
-                  <span
-                    onClick={() => !item.done && startEdit(item)}
-                    style={{ flex: 1, minWidth: 0, fontSize: 13, textDecoration: item.done ? 'line-through' : 'none', opacity: item.done ? .4 : 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: item.done ? 'default' : 'pointer' }}
-                  >
+                  <span onClick={() => !item.done && item.source !== 'todoist' && startEdit(item)}
+                    style={{ flex: 1, minWidth: 0, fontSize: 12, textDecoration: item.done ? 'line-through' : 'none', opacity: item.done ? .35 : 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: !item.done && item.source !== 'todoist' ? 'pointer' : 'default' }}>
                     {item.text}
                   </span>
-                  {/* 日時 */}
-                  <span className="mono muted" style={{ fontSize: 9, letterSpacing: '.04em', flexShrink: 0, opacity: .5 }}>
-                    {item.done && item.completedAt ? `✓ ${fmtDate(item.completedAt)}` : fmtDate(item.createdAt)}
-                  </span>
-                  {/* アクション */}
-                  <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-                    {!item.done && (
-                      <button onPointerDown={(e) => e.stopPropagation()} onClick={() => startEdit(item)}
+
+                  {item.dueDate && !item.done && (() => {
+                    const { label, color } = dueBadge(item.dueDate);
+                    return (
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '.04em', color, background: `${color === 'var(--accent)' ? 'rgba(198,160,255,.15)' : color + '18'}`, borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>
+                        {label}
+                      </span>
+                    );
+                  })()}
+
+                  {item.source === 'todoist' && (
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 7, color: '#e44332', opacity: .6, flexShrink: 0 }}>T</span>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+                    {!item.done && item.source !== 'todoist' && (
+                      <button onPointerDown={e => e.stopPropagation()} onClick={() => startEdit(item)}
                         className="todo-action"
-                        style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 5px', fontSize: 12, borderRadius: 4, lineHeight: 1 }}>✎</button>
+                        style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 4px', fontSize: 11, borderRadius: 4 }}>✎</button>
                     )}
-                    <button onPointerDown={(e) => e.stopPropagation()} onClick={() => remove(item.id)}
+                    <button onPointerDown={e => e.stopPropagation()} onClick={() => remove(item.id)}
                       className="todo-action"
-                      style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 5px', fontSize: 14, borderRadius: 4, lineHeight: 1 }}>×</button>
+                      style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 4px', fontSize: 13, borderRadius: 4 }}>×</button>
                   </div>
                 </>
               )}
             </div>
           ))}
 
-          {/* 追加フォーム: リストの末尾アイテムとして同スタイルで表示 */}
-          <form onSubmit={add} onPointerDown={(e) => e.stopPropagation()}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', flexShrink: 0 }}>
-            <button type="submit"
-              style={{ width: 18, height: 18, borderRadius: 5, border: '1.5px dashed var(--rule-strong)', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', padding: 0, color: 'var(--ink-faint)', fontSize: 15, lineHeight: 1 }}>+</button>
-            <input value={newText} onChange={(e) => setNewText(e.target.value)}
-              onPointerDown={(e) => e.stopPropagation()}
-              placeholder="新しいタスクを追加"
-              style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit', fontSize: 13 }} />
+          {/* ── Add form ── */}
+          <form onSubmit={add} onPointerDown={e => e.stopPropagation()}
+            style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '5px 0 2px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <button type="submit"
+                style={{ width: 15, height: 15, borderRadius: 4, border: '1.5px dashed var(--rule-strong)', background: 'transparent', flexShrink: 0, cursor: 'pointer', padding: 0, color: 'var(--ink-faint)', fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+              <input value={newText} onChange={e => setNewText(e.target.value)}
+                onPointerDown={e => e.stopPropagation()}
+                placeholder="新しいタスク..."
+                style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit', fontSize: 12 }} />
+            </div>
+
+            {/* Quick options — appear only when typing */}
+            {newText && (
+              <div style={{ display: 'flex', gap: 3, paddingLeft: 20, flexWrap: 'wrap' }}>
+                {[{ l: '今日', v: localDateStr(0) }, { l: '明日', v: localDateStr(1) }].map(d => (
+                  <button key={d.v} type="button" onClick={() => setNewDue(newDue === d.v ? '' : d.v)}
+                    style={quickChip(newDue === d.v)}>{d.l}</button>
+                ))}
+                <input type="date" value={newDue} onChange={e => setNewDue(e.target.value)}
+                  style={{ background: 'var(--chip)', border: '.5px solid var(--rule)', borderRadius: 4, padding: '1px 4px', color: 'inherit', font: 'inherit', fontSize: 8, outline: 'none', width: 88, colorScheme: 'dark' }} />
+                {CATS.map(cat => (
+                  <button key={cat.id} type="button" onClick={() => setNewCat(newCat === cat.id ? '' : cat.id)}
+                    style={{ ...quickChip(newCat === cat.id), background: newCat === cat.id ? cat.color : 'var(--chip)', color: newCat === cat.id ? '#0a0d14' : 'var(--ink-mute)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: newCat === cat.id ? '#0a0d14' : cat.color }} />
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </form>
         </div>
       </div>
     </div>
   );
+}
+
+// ─── Style helpers ────────────────────────────────────────────────
+
+function hdrBtn(active: boolean): React.CSSProperties {
+  return { background: 'transparent', border: 'none', color: active ? 'var(--accent)' : 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 10, padding: '1px 3px', lineHeight: 1 };
+}
+
+function filterBtn(active: boolean): React.CSSProperties {
+  return { background: active ? 'var(--chip-hover)' : 'transparent', border: '.5px solid var(--rule)', borderRadius: 5, padding: '2px 7px', fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '.1em', cursor: 'pointer', color: active ? 'inherit' : 'var(--ink-faint)' };
+}
+
+function quickChip(active: boolean): React.CSSProperties {
+  return { background: active ? 'var(--accent)' : 'var(--chip)', border: '.5px solid var(--rule)', borderRadius: 4, padding: '2px 7px', fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '.1em', cursor: 'pointer', color: active ? '#0a0d14' : 'var(--ink-mute)' };
+}
+
+function overlayBtn(bg: string, color: string, border = 'none'): React.CSSProperties {
+  return { background: bg, border, borderRadius: 7, padding: '6px 14px', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.12em', cursor: 'pointer', color, fontWeight: bg === 'var(--accent)' ? 500 : undefined };
 }
