@@ -21,6 +21,8 @@ import { RssWidget } from './RssWidget';
 import { StickyWidget } from './StickyWidget';
 import { FocusWidget } from './FocusWidget';
 import { DayCalendarWidget } from './DayCalendarWidget';
+import { TimerWidget } from './TimerWidget';
+import { AlarmWidget } from './AlarmWidget';
 
 export const WIDGET_REGISTRY: WidgetDef[] = [
   { type: 'clock',     label: '時計',         Component: ClockWidget,      defaultSize: { w: 2, h: 2 } },
@@ -45,6 +47,8 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { type: 'sticky',    label: '付箋',         Component: StickyWidget,     defaultSize: { w: 2, h: 2 } },
   { type: 'focus',     label: '集中タイマー', Component: FocusWidget,      defaultSize: { w: 2, h: 2 } },
   { type: 'daycal',   label: '一日カレンダー', Component: DayCalendarWidget, defaultSize: { w: 2, h: 4 } },
+  { type: 'timer',    label: 'タイマー',       Component: TimerWidget,       defaultSize: { w: 2, h: 2 } },
+  { type: 'alarm',    label: 'アラーム',       Component: AlarmWidget,       defaultSize: { w: 2, h: 2 } },
 ];
 
 // 全幅(1〜13) × 全高(1〜6) の任意サイズを許可
@@ -62,4 +66,5 @@ export {
   PomodoroWidget, GithubWidget, SystemWidget,
   CountdownWidget, HabitWidget, MoodWidget, BooksWidget, WorkoutWidget,
   ForexWidget, RssWidget, StickyWidget, FocusWidget, DayCalendarWidget,
+  TimerWidget, AlarmWidget,
 };

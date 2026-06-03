@@ -55,14 +55,14 @@ const LAYOUT_KEY = 'wb.layout.v2';
 const DEFAULT_LAYOUT: WidgetItem[] = [
   { id: 'w-clock',   type: 'clock',    x: 5,  y: 1, w: 4, h: 4 },
   { id: 'w-weather', type: 'weather',  x: 1,  y: 1, w: 2, h: 2 },
-  { id: 'w-tokens',  type: 'tokens',   x: 3,  y: 1, w: 2, h: 2 },
   { id: 'w-pomo',    type: 'pomodoro', x: 9,  y: 1, w: 2, h: 2 },
   { id: 'w-markets', type: 'markets',  x: 11, y: 1, w: 3, h: 2 },
   { id: 'w-music',   type: 'music',    x: 1,  y: 3, w: 4, h: 2 },
   { id: 'w-github',  type: 'github',   x: 9,  y: 3, w: 4, h: 2 },
   { id: 'w-todo',    type: 'todo',     x: 1,  y: 5, w: 3, h: 2 },
-  { id: 'w-notes',   type: 'notes',    x: 4,  y: 5, w: 3, h: 2 },
-  { id: 'w-system',  type: 'system',   x: 7,  y: 5, w: 3, h: 2 },
+  { id: 'w-notes',   type: 'notes',    x: 4,  y: 5, w: 2, h: 2 },
+  { id: 'w-timer',   type: 'timer',    x: 6,  y: 5, w: 2, h: 2 },
+  { id: 'w-alarm',   type: 'alarm',    x: 8,  y: 5, w: 2, h: 2 },
   { id: 'w-cal',     type: 'calendar', x: 10, y: 5, w: 4, h: 2 },
 ];
 
