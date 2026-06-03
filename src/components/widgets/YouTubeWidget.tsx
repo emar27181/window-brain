@@ -42,7 +42,6 @@ function saveResume(videoId: string, t: number) {
   } catch {}
 }
 
-// Singleton: load YouTube IFrame API once
 let _ytPromise: Promise<void> | null = null;
 function loadYTApi(): Promise<void> {
   if (_ytPromise) return _ytPromise;
@@ -53,29 +52,37 @@ function loadYTApi(): Promise<void> {
     const s = document.createElement('script');
     s.src = 'https://www.youtube.com/iframe_api';
     s.async = true;
-    s.onerror = () => resolve(); // resolve anyway, player creation will fail gracefully
+    s.onerror = () => resolve();
     document.head.appendChild(s);
   });
   return _ytPromise;
 }
 
 export function YouTubeWidget() {
-  const [embed, setEmbed] = useState<Embed>(loadEmbed);
-  const [editing, setEditing]   = useState(false);
-  const [input, setInput]       = useState('');
-  const inputRef    = useRef<HTMLInputElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const playerRef   = useRef<any>(null);
-  const tickRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [embed, setEmbed]     = useState<Embed>(loadEmbed);
+  const [editing, setEditing] = useState(false);
+  const [input, setInput]     = useState('');
+  const [active, setActive]   = useState(false); // false = poster, true = player
+  const [thumbErr, setThumbErr] = useState(false);
 
+  const inputRef     = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const playerRef    = useRef<any>(null);
+  const tickRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Reset to poster when embed changes
+  useEffect(() => { setActive(false); setThumbErr(false); }, [embed]);
+
+  // Build / tear down YT player when active
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!active || !containerRef.current) return;
     const videoId  = embed.v;
     const startSec = videoId ? loadResume(videoId) : 0;
     let alive = true;
 
-    const stopTick = () => { if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; } };
-
+    const stopTick = () => {
+      if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
+    };
     const startTick = (vid: string) => {
       stopTick();
       tickRef.current = setInterval(() => {
@@ -88,13 +95,12 @@ export function YouTubeWidget() {
       const YT = (window as any).YT;
       if (!YT?.Player) return;
 
-      // Clear previous player content
       if (playerRef.current) { try { playerRef.current.destroy(); } catch {} playerRef.current = null; }
       containerRef.current.innerHTML = '';
       const inner = document.createElement('div');
       containerRef.current.appendChild(inner);
 
-      const vars: Record<string, unknown> = { autoplay: 1, start: Math.floor(startSec) };
+      const vars: Record<string, unknown> = { autoplay: 1, start: Math.floor(startSec), rel: 0, modestbranding: 1 };
       if (embed.list) { vars.list = embed.list; vars.listType = 'playlist'; }
 
       playerRef.current = new YT.Player(inner, {
@@ -102,8 +108,17 @@ export function YouTubeWidget() {
         videoId: embed.v,
         playerVars: vars,
         events: {
+          onReady: () => {
+            // Prevent links inside the player from opening new tabs
+            const iframe = containerRef.current?.querySelector('iframe');
+            if (iframe && !iframe.hasAttribute('sandbox')) {
+              iframe.setAttribute('sandbox',
+                'allow-scripts allow-same-origin allow-forms allow-presentation allow-popups'
+              );
+            }
+          },
           onStateChange: (e: { data: number }) => {
-            if (e.data === 1 && videoId) startTick(videoId); // playing
+            if (e.data === 1 && videoId) startTick(videoId);
             else stopTick();
           },
         },
@@ -120,9 +135,8 @@ export function YouTubeWidget() {
       } catch {}
       playerRef.current = null;
     };
-  }, [embed]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, embed]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // F5 対策: ページを離れる直前に再生位置を保存
   useEffect(() => {
     if (!embed.v) return;
     const videoId = embed.v;
@@ -150,24 +164,60 @@ export function YouTubeWidget() {
     setTimeout(() => inputRef.current?.focus(), 30);
   };
 
+  const thumbUrl = embed.v
+    ? (thumbErr
+        ? `https://i.ytimg.com/vi/${embed.v}/hqdefault.jpg`
+        : `https://i.ytimg.com/vi/${embed.v}/maxresdefault.jpg`)
+    : null;
+
   return (
     <div className="w-body" style={{ padding: 0 }}>
       {/* Header overlay */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 3, background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 100%)' }}>
-        <div className="w-head" style={{ margin: 0, color: '#fff' }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 3, background: 'linear-gradient(to bottom, rgba(0,0,0,.6) 0%, transparent 100%)', pointerEvents: 'none' }}>
+        <div className="w-head" style={{ margin: 0, color: '#fff', pointerEvents: 'none' }}>
           <div className="title">
-            <span className="glyph" style={{ background: '#ff3355', boxShadow: '0 0 8px #ff3355' }}></span>
+            <span className="glyph" style={{ background: '#ff3355', boxShadow: '0 0 8px #ff3355' }} />
             YOUTUBE
           </div>
         </div>
         <button
           onPointerDown={(e) => e.stopPropagation()}
           onClick={startEditing}
-          style={{ background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(8px)', border: '.5px solid rgba(255,255,255,.25)', color: '#fff', borderRadius: 6, padding: '3px 9px', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.12em', cursor: 'pointer' }}
+          style={{ background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(8px)', border: '.5px solid rgba(255,255,255,.25)', color: '#fff', borderRadius: 6, padding: '3px 9px', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.12em', cursor: 'pointer', pointerEvents: 'auto' }}
         >
           URL ✎
         </button>
       </div>
+
+      {/* Poster — shown when not active */}
+      {!active && (
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setActive(true)}
+          style={{ position: 'absolute', inset: 0, border: 'none', padding: 0, cursor: 'pointer', background: '#0a0d14', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 'inherit' }}
+        >
+          {thumbUrl && (
+            <img
+              src={thumbUrl}
+              alt=""
+              onError={() => { if (!thumbErr) setThumbErr(true); }}
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: .85 }}
+            />
+          )}
+          {/* Play button */}
+          <div style={{ position: 'relative', zIndex: 1, width: 52, height: 36, borderRadius: 8, background: 'rgba(255,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 16px rgba(0,0,0,.5)', transition: 'transform .15s' }}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="white">
+              <polygon points="5,2 14,8 5,14" />
+            </svg>
+          </div>
+          {/* Resume indicator */}
+          {embed.v && loadResume(embed.v) > 0 && (
+            <div style={{ position: 'absolute', bottom: 10, right: 12, fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.08em', color: 'rgba(255,255,255,.7)', background: 'rgba(0,0,0,.5)', borderRadius: 4, padding: '2px 6px', zIndex: 2 }}>
+              ↩ resume
+            </div>
+          )}
+        </button>
+      )}
 
       {/* URL edit overlay */}
       {editing && (
@@ -191,8 +241,8 @@ export function YouTubeWidget() {
         </div>
       )}
 
-      {/* YT player mounts here — YouTube API replaces this div with an iframe */}
-      <div ref={containerRef} className="yt-player" style={{ position: 'absolute', inset: 0 }} />
+      {/* YT player container — mounted when active */}
+      {active && <div ref={containerRef} className="yt-player" style={{ position: 'absolute', inset: 0 }} />}
     </div>
   );
 }
