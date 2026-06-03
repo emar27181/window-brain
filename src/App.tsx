@@ -441,21 +441,21 @@ export default function App() {
 
   // ─── Export / Import ──────────────────────────────────────────
   const exportData = () => {
-    const readLS = <T,>(k: string, fallback: T): T => {
-      try { const v = localStorage.getItem(k); return v == null ? fallback : JSON.parse(v) as T; }
-      catch { return fallback; }
-    };
+    // Collect every wb.* key from localStorage (includes dynamic keys like wb.daycal.v1.YYYY-MM-DD)
+    const store: Record<string, unknown> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith('wb.')) continue;
+      try { store[key] = JSON.parse(localStorage.getItem(key)!); }
+      catch { store[key] = localStorage.getItem(key); }
+    }
     const payload = {
-      version: 'wb.export.v1',
+      version: 'wb.export.v2',
       exportedAt: new Date().toISOString(),
       app: 'window brain',
       layout,
-      data: {
-        todos: readLS<unknown>('wb.todos.v1', null),
-        notes: readLS<unknown>('wb.notes.v1', null),
-        calendar: readLS<unknown>('wb.calendar.v1', null),
-      },
       tweaks: { ...t },
+      store,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json; charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -481,28 +481,39 @@ export default function App() {
       const json = JSON.parse(text) as {
         version: string;
         layout?: WidgetItem[];
-        data?: { todos?: unknown; notes?: unknown; calendar?: unknown };
         tweaks?: Partial<TweakValues>;
+        store?: Record<string, unknown>;
+        // v1 compat
+        data?: { todos?: unknown; notes?: unknown; calendar?: unknown };
       };
-      if (!json || json.version !== 'wb.export.v1') {
+      const v = json?.version;
+      if (v !== 'wb.export.v1' && v !== 'wb.export.v2') {
         flashToast('対応していないファイルです', 'err');
         return;
       }
-      if (!confirm('現在のレイアウト・タスク・メモを上書きします。よろしいですか？')) return;
+      if (!confirm('現在の全データを上書きします。よろしいですか？')) return;
+
+      if (v === 'wb.export.v2' && json.store) {
+        // Restore every wb.* key verbatim
+        for (const [key, val] of Object.entries(json.store)) {
+          if (!key.startsWith('wb.')) continue;
+          try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+        }
+      } else if (v === 'wb.export.v1' && json.data) {
+        // Legacy: restore only the three known keys
+        if (Array.isArray(json.data.todos))
+          localStorage.setItem('wb.todos.v1', JSON.stringify(json.data.todos));
+        if (typeof json.data.notes === 'string')
+          localStorage.setItem('wb.notes.v1', JSON.stringify({ content: json.data.notes, updatedAt: new Date().toISOString() }));
+        else if (json.data.notes && typeof (json.data.notes as Record<string, unknown>).content === 'string')
+          localStorage.setItem('wb.notes.v1', JSON.stringify(json.data.notes));
+        if (json.data.calendar && typeof json.data.calendar === 'object')
+          localStorage.setItem('wb.calendar.v1', JSON.stringify(json.data.calendar));
+      }
 
       if (Array.isArray(json.layout)) { setLayout(json.layout); saveLayout(json.layout); }
-      if (json.data) {
-        if (Array.isArray(json.data.todos)) localStorage.setItem('wb.todos.v1', JSON.stringify(json.data.todos));
-        // notes: 旧フォーマット(string) / 新フォーマット({ content, updatedAt }) 両対応
-        if (typeof json.data.notes === 'string') {
-          localStorage.setItem('wb.notes.v1', JSON.stringify({ content: json.data.notes, updatedAt: new Date().toISOString() }));
-        } else if (json.data.notes && typeof (json.data.notes as Record<string, unknown>).content === 'string') {
-          localStorage.setItem('wb.notes.v1', JSON.stringify(json.data.notes));
-        }
-        if (json.data.calendar && typeof json.data.calendar === 'object') localStorage.setItem('wb.calendar.v1', JSON.stringify(json.data.calendar));
-        window.dispatchEvent(new CustomEvent('wb:data-updated'));
-      }
       if (json.tweaks) setTweak(json.tweaks);
+      window.dispatchEvent(new CustomEvent('wb:data-updated'));
       flashToast('インポートしました');
     } catch {
       flashToast('JSONを読み込めませんでした', 'err');
