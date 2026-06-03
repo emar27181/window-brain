@@ -18,6 +18,7 @@ export interface Todo {
   completedAt?: string;
   category?: string;
   dueDate?: string;      // "YYYY-MM-DD"
+  indent?: number;       // 0–3
   source?: 'local' | 'todoist';
   externalId?: string;
 }
@@ -62,6 +63,7 @@ function migrateItem(raw: Record<string, unknown>): Todo {
     completedAt: typeof raw.completedAt === 'string' ? raw.completedAt : undefined,
     category: typeof raw.category === 'string' ? raw.category : undefined,
     dueDate: typeof raw.dueDate === 'string' ? raw.dueDate : undefined,
+    indent: typeof raw.indent === 'number' ? Math.min(3, Math.max(0, raw.indent)) : 0,
     source: raw.source === 'todoist' ? 'todoist' : 'local',
     externalId: typeof raw.externalId === 'string' ? raw.externalId : undefined,
   };
@@ -134,6 +136,7 @@ export function TodoWidget({ size }: { size: Size }) {
   const [newText, setNewText]     = useState('');
   const [newDue, setNewDue]       = useState('');
   const [newCat, setNewCat]       = useState('');
+  const [newIndent, setNewIndent] = useState(0);
   const [filterCat, setFilterCat] = useState('');
   const [editId, setEditId]       = useState<number | null>(null);
   const [editText, setEditText]   = useState('');
@@ -230,6 +233,12 @@ export function TodoWidget({ size }: { size: Size }) {
     setEditId(null);
   };
 
+  const indent = (id: number, delta: 1 | -1) => {
+    setItems(p => p.map(i => i.id === id
+      ? { ...i, indent: Math.min(3, Math.max(0, (i.indent ?? 0) + delta)) }
+      : i));
+  };
+
   const add = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newText.trim()) return;
@@ -238,9 +247,10 @@ export function TodoWidget({ size }: { size: Size }) {
       createdAt: new Date().toISOString(),
       category: newCat || undefined,
       dueDate: newDue || undefined,
+      indent: newIndent || undefined,
       source: 'local',
     }, ...p]);
-    setNewText(''); setNewDue(''); setNewCat('');
+    setNewText(''); setNewDue(''); setNewCat(''); setNewIndent(0);
   };
 
   const saveSettings = () => {
@@ -340,84 +350,119 @@ export function TodoWidget({ size }: { size: Size }) {
       <div className="w-content" style={{ gap: 0, overflow: 'hidden', minHeight: 0 }}>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingRight: 2 }}>
 
-          {visible.map(item => (
-            <div key={item.id} className="todo-row"
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 0', borderBottom: '.5px solid var(--rule)', flexShrink: 0 }}>
+          {visible.map(item => {
+            const lvl = item.indent ?? 0;
+            return (
+              <div key={item.id} className="todo-row"
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 0', borderBottom: '.5px solid var(--rule)', flexShrink: 0, paddingLeft: lvl * 14 }}>
 
-              {/* Category dot */}
-              {item.category && (
-                <span style={{ width: 5, height: 5, borderRadius: '50%', background: catColor(item.category), flexShrink: 0 }} />
-              )}
-
-              {/* Checkbox */}
-              <button onPointerDown={e => e.stopPropagation()} onClick={() => toggle(item.id)}
-                style={{ width: 15, height: 15, borderRadius: 4, flexShrink: 0, cursor: 'pointer', padding: 0, border: item.source === 'todoist' ? '1.5px solid #e44332' : '1.5px solid var(--rule-strong)', background: item.done ? (item.source === 'todoist' ? '#e44332' : 'var(--accent)') : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {item.done && (
-                  <svg width="8" height="8" viewBox="0 0 10 10">
-                    <path d="M1.5 5L4 7.5L8.5 2" stroke="#0a0d14" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+                {/* Indent guide line */}
+                {lvl > 0 && (
+                  <span style={{ position: 'absolute', left: lvl * 14 - 6, width: 1, height: '100%', background: 'var(--rule-strong)', opacity: .5, pointerEvents: 'none' }} />
                 )}
-              </button>
 
-              {editId === item.id ? (
-                <>
-                  <input ref={editRef} value={editText}
-                    onChange={e => setEditText(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditId(null); }}
-                    onPointerDown={e => e.stopPropagation()}
-                    style={{ flex: 1, minWidth: 0, background: 'var(--track)', border: '.5px solid var(--accent)', borderRadius: 5, padding: '2px 6px', color: 'inherit', font: 'inherit', fontSize: 12, outline: 'none' }} />
-                  <input type="date" value={editDue} onChange={e => setEditDue(e.target.value)}
-                    onPointerDown={e => e.stopPropagation()}
-                    style={{ width: 96, background: 'var(--track)', border: '.5px solid var(--rule)', borderRadius: 5, padding: '2px 4px', color: 'inherit', font: 'inherit', fontSize: 9, outline: 'none', colorScheme: 'dark' }} />
-                  <button onPointerDown={e => e.stopPropagation()} onClick={saveEdit}
-                    style={{ background: 'var(--accent)', border: 'none', borderRadius: 4, width: 18, height: 18, cursor: 'pointer', flexShrink: 0, color: '#0a0d14', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</button>
-                  <button onPointerDown={e => e.stopPropagation()} onClick={() => setEditId(null)}
-                    style={{ background: 'var(--chip)', border: 'none', borderRadius: 4, width: 18, height: 18, cursor: 'pointer', flexShrink: 0, color: 'var(--ink-mute)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>✕</button>
-                </>
-              ) : (
-                <>
-                  <span onClick={() => !item.done && item.source !== 'todoist' && startEdit(item)}
-                    style={{ flex: 1, minWidth: 0, fontSize: 12, textDecoration: item.done ? 'line-through' : 'none', opacity: item.done ? .35 : 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: !item.done && item.source !== 'todoist' ? 'pointer' : 'default' }}>
-                    {item.text}
-                  </span>
+                {/* Category dot */}
+                {item.category && (
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: catColor(item.category), flexShrink: 0 }} />
+                )}
 
-                  {item.dueDate && !item.done && (() => {
-                    const { label, color } = dueBadge(item.dueDate);
-                    return (
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '.04em', color, background: `${color === 'var(--accent)' ? 'rgba(198,160,255,.15)' : color + '18'}`, borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>
-                        {label}
-                      </span>
-                    );
-                  })()}
-
-                  {item.source === 'todoist' && (
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 7, color: '#e44332', opacity: .6, flexShrink: 0 }}>T</span>
+                {/* Checkbox */}
+                <button onPointerDown={e => e.stopPropagation()} onClick={() => toggle(item.id)}
+                  style={{ width: 15, height: 15, borderRadius: 4, flexShrink: 0, cursor: 'pointer', padding: 0, border: item.source === 'todoist' ? '1.5px solid #e44332' : '1.5px solid var(--rule-strong)', background: item.done ? (item.source === 'todoist' ? '#e44332' : 'var(--accent)') : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {item.done && (
+                    <svg width="8" height="8" viewBox="0 0 10 10">
+                      <path d="M1.5 5L4 7.5L8.5 2" stroke="#0a0d14" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
                   )}
+                </button>
 
-                  <div style={{ display: 'flex', gap: 1, flexShrink: 0 }}>
-                    {!item.done && item.source !== 'todoist' && (
-                      <button onPointerDown={e => e.stopPropagation()} onClick={() => startEdit(item)}
-                        className="todo-action"
-                        style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 4px', fontSize: 11, borderRadius: 4 }}>✎</button>
+                {editId === item.id ? (
+                  <>
+                    <input ref={editRef} value={editText}
+                      onChange={e => setEditText(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Tab') {
+                          e.preventDefault();
+                          indent(item.id, e.shiftKey ? -1 : 1);
+                        } else if (e.key === 'Enter') {
+                          saveEdit();
+                        } else if (e.key === 'Escape') {
+                          setEditId(null);
+                        }
+                      }}
+                      onPointerDown={e => e.stopPropagation()}
+                      style={{ flex: 1, minWidth: 0, background: 'var(--track)', border: '.5px solid var(--accent)', borderRadius: 5, padding: '2px 6px', color: 'inherit', font: 'inherit', fontSize: 12, outline: 'none' }} />
+                    <input type="date" value={editDue} onChange={e => setEditDue(e.target.value)}
+                      onPointerDown={e => e.stopPropagation()}
+                      style={{ width: 96, background: 'var(--track)', border: '.5px solid var(--rule)', borderRadius: 5, padding: '2px 4px', color: 'inherit', font: 'inherit', fontSize: 9, outline: 'none', colorScheme: 'dark' }} />
+                    <button onPointerDown={e => e.stopPropagation()} onClick={saveEdit}
+                      style={{ background: 'var(--accent)', border: 'none', borderRadius: 4, width: 18, height: 18, cursor: 'pointer', flexShrink: 0, color: '#0a0d14', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</button>
+                    <button onPointerDown={e => e.stopPropagation()} onClick={() => setEditId(null)}
+                      style={{ background: 'var(--chip)', border: 'none', borderRadius: 4, width: 18, height: 18, cursor: 'pointer', flexShrink: 0, color: 'var(--ink-mute)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>✕</button>
+                  </>
+                ) : (
+                  <>
+                    <span onClick={() => !item.done && item.source !== 'todoist' && startEdit(item)}
+                      style={{ flex: 1, minWidth: 0, fontSize: 12, textDecoration: item.done ? 'line-through' : 'none', opacity: item.done ? .35 : 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: !item.done && item.source !== 'todoist' ? 'pointer' : 'default' }}>
+                      {item.text}
+                    </span>
+
+                    {item.dueDate && !item.done && (() => {
+                      const { label, color } = dueBadge(item.dueDate);
+                      return (
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '.04em', color, background: color === 'var(--accent)' ? 'rgba(198,160,255,.15)' : color + '18', borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>
+                          {label}
+                        </span>
+                      );
+                    })()}
+
+                    {item.source === 'todoist' && (
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 7, color: '#e44332', opacity: .6, flexShrink: 0 }}>T</span>
                     )}
-                    <button onPointerDown={e => e.stopPropagation()} onClick={() => remove(item.id)}
-                      className="todo-action"
-                      style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 4px', fontSize: 13, borderRadius: 4 }}>×</button>
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
+
+                    <div style={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+                      {!item.done && item.source !== 'todoist' && (
+                        <>
+                          {lvl > 0 && (
+                            <button onPointerDown={e => e.stopPropagation()} onClick={() => indent(item.id, -1)}
+                              className="todo-action"
+                              style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 3px', fontSize: 10, borderRadius: 4, lineHeight: 1 }}>⇤</button>
+                          )}
+                          {lvl < 3 && (
+                            <button onPointerDown={e => e.stopPropagation()} onClick={() => indent(item.id, 1)}
+                              className="todo-action"
+                              style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 3px', fontSize: 10, borderRadius: 4, lineHeight: 1 }}>⇥</button>
+                          )}
+                          <button onPointerDown={e => e.stopPropagation()} onClick={() => startEdit(item)}
+                            className="todo-action"
+                            style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 4px', fontSize: 11, borderRadius: 4 }}>✎</button>
+                        </>
+                      )}
+                      <button onPointerDown={e => e.stopPropagation()} onClick={() => remove(item.id)}
+                        className="todo-action"
+                        style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: '2px 4px', fontSize: 13, borderRadius: 4 }}>×</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
 
           {/* ── Add form ── */}
           <form onSubmit={add} onPointerDown={e => e.stopPropagation()}
             style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '5px 0 2px', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, paddingLeft: newIndent * 14 }}>
               <button type="submit"
                 style={{ width: 15, height: 15, borderRadius: 4, border: '1.5px dashed var(--rule-strong)', background: 'transparent', flexShrink: 0, cursor: 'pointer', padding: 0, color: 'var(--ink-faint)', fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
               <input value={newText} onChange={e => setNewText(e.target.value)}
                 onPointerDown={e => e.stopPropagation()}
                 placeholder="新しいタスク..."
+                onKeyDown={e => {
+                  if (e.key === 'Tab') {
+                    e.preventDefault();
+                    setNewIndent(v => e.shiftKey ? Math.max(0, v - 1) : Math.min(3, v + 1));
+                  }
+                }}
                 style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit', fontSize: 12 }} />
             </div>
 
