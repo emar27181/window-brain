@@ -577,7 +577,7 @@ export default function App() {
                   style={{ height: cellH }}
                   onPointerDown={(e) => onMobileWidgetPointerDown(e, item.id)}
                 >
-                  <W size={mobileSize} />
+                  <W size={mobileSize} widgetId={item.id} />
                 </div>
               );
             })}
@@ -626,7 +626,7 @@ export default function App() {
                   style={cellStyle(pos.x, pos.y, pos.w, pos.h)}
                   onPointerDown={(e) => onPointerDownMove(e, item)}
                 >
-                  <W size={{ w: pos.w, h: pos.h }} />
+                  <W size={{ w: pos.w, h: pos.h }} widgetId={item.id} />
                   <button className="close" onPointerDown={(e) => e.stopPropagation()} onClick={() => removeWidget(item.id)}>×</button>
                   <div className="resize" onPointerDown={(e) => onPointerDownResize(e, item)} />
                 </div>
@@ -744,7 +744,7 @@ export default function App() {
               </div>
               <div className="wex-body">
                 <div className="w-body">
-                  <W size={{ w: 8, h: 6 }} />
+                  <W size={{ w: 8, h: 6 }} widgetId={mobileExpandId} />
                 </div>
               </div>
               <div className="wex-settings">

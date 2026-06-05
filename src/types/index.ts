@@ -47,7 +47,7 @@ export interface BgOption {
 export interface WidgetDef {
   type: string;
   label: string;
-  Component: React.ComponentType<{ size: Size }>;
+  Component: React.ComponentType<{ size: Size; widgetId?: string }>;
   defaultSize: Size;
 }
 
