@@ -1,14 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
 
-const STORAGE_KEY = 'wb.widget.youtube.v1';
-const RESUME_KEY  = 'wb.widget.youtube.resume.v1';
-const DEFAULT_V   = 'jfKfPfyJRdk';
+const DEFAULT_V = 'jfKfPfyJRdk';
 
 interface Embed { v?: string; list?: string }
 
-function loadEmbed(): Embed {
+function embedKey(widgetId?: string) {
+  return widgetId ? `wb.widget.youtube.v1.${widgetId}` : 'wb.widget.youtube.v1';
+}
+function resumeKey(widgetId?: string) {
+  return widgetId ? `wb.widget.youtube.resume.v1.${widgetId}` : 'wb.widget.youtube.resume.v1';
+}
+
+function loadEmbed(widgetId?: string): Embed {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(embedKey(widgetId));
     if (!raw) return { v: DEFAULT_V };
     const parsed = JSON.parse(raw);
     return typeof parsed === 'string' ? { v: parsed } : (parsed as Embed);
@@ -25,20 +30,20 @@ function parseEmbed(input: string): Embed | null {
   return { v, list };
 }
 
-function loadResume(videoId: string): number {
+function loadResume(videoId: string, widgetId?: string): number {
   try {
-    const saved = JSON.parse(localStorage.getItem(RESUME_KEY) ?? '{}') as Record<string, number>;
+    const saved = JSON.parse(localStorage.getItem(resumeKey(widgetId)) ?? '{}') as Record<string, number>;
     const t = Number(saved[videoId] ?? 0);
     return t > 5 && t < 86400 ? t : 0;
   } catch { return 0; }
 }
 
-function saveResume(videoId: string, t: number) {
+function saveResume(videoId: string, t: number, widgetId?: string) {
   if (!(t > 5 && t < 86400)) return;
   try {
-    const saved = JSON.parse(localStorage.getItem(RESUME_KEY) ?? '{}') as Record<string, number>;
+    const saved = JSON.parse(localStorage.getItem(resumeKey(widgetId)) ?? '{}') as Record<string, number>;
     saved[videoId] = Math.floor(t);
-    localStorage.setItem(RESUME_KEY, JSON.stringify(saved));
+    localStorage.setItem(resumeKey(widgetId), JSON.stringify(saved));
   } catch {}
 }
 
@@ -58,8 +63,8 @@ function loadYTApi(): Promise<void> {
   return _ytPromise;
 }
 
-export function YouTubeWidget() {
-  const [embed, setEmbed]     = useState<Embed>(loadEmbed);
+export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; widgetId?: string }) {
+  const [embed, setEmbed]     = useState<Embed>(() => loadEmbed(widgetId));
   const [editing, setEditing] = useState(false);
   const [input, setInput]     = useState('');
   const [active, setActive]   = useState(false); // false = poster, true = player
@@ -73,11 +78,18 @@ export function YouTubeWidget() {
   // Reset to poster when embed changes
   useEffect(() => { setActive(false); setThumbErr(false); }, [embed]);
 
+  // Reload from localStorage after import
+  useEffect(() => {
+    const onUpdate = () => { setEmbed(loadEmbed(widgetId)); setActive(false); };
+    window.addEventListener('wb:data-updated', onUpdate);
+    return () => window.removeEventListener('wb:data-updated', onUpdate);
+  }, []);
+
   // Build / tear down YT player when active
   useEffect(() => {
     if (!active || !containerRef.current) return;
     const videoId  = embed.v;
-    const startSec = videoId ? loadResume(videoId) : 0;
+    const startSec = videoId ? loadResume(videoId, widgetId) : 0;
     let alive = true;
 
     const stopTick = () => {
@@ -86,7 +98,7 @@ export function YouTubeWidget() {
     const startTick = (vid: string) => {
       stopTick();
       tickRef.current = setInterval(() => {
-        try { const t = playerRef.current?.getCurrentTime?.() ?? 0; saveResume(vid, t); } catch {}
+        try { const t = playerRef.current?.getCurrentTime?.() ?? 0; saveResume(vid, t, widgetId); } catch {}
       }, 5000);
     };
 
@@ -130,7 +142,7 @@ export function YouTubeWidget() {
       stopTick();
       try {
         const t = playerRef.current?.getCurrentTime?.() ?? 0;
-        if (videoId) saveResume(videoId, t);
+        if (videoId) saveResume(videoId, t, widgetId);
         playerRef.current?.destroy?.();
       } catch {}
       playerRef.current = null;
@@ -141,7 +153,7 @@ export function YouTubeWidget() {
     if (!embed.v) return;
     const videoId = embed.v;
     const onUnload = () => {
-      try { const t = playerRef.current?.getCurrentTime?.() ?? 0; saveResume(videoId, t); } catch {}
+      try { const t = playerRef.current?.getCurrentTime?.() ?? 0; saveResume(videoId, t, widgetId); } catch {}
     };
     window.addEventListener('beforeunload', onUnload);
     return () => window.removeEventListener('beforeunload', onUnload);
@@ -151,7 +163,7 @@ export function YouTubeWidget() {
     const next = parseEmbed(input);
     if (next) {
       setEmbed(next);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
+      try { localStorage.setItem(embedKey(widgetId), JSON.stringify(next)); } catch {}
     }
     setEditing(false);
     setInput('');
@@ -211,7 +223,7 @@ export function YouTubeWidget() {
             </svg>
           </div>
           {/* Resume indicator */}
-          {embed.v && loadResume(embed.v) > 0 && (
+          {embed.v && loadResume(embed.v, widgetId) > 0 && (
             <div style={{ position: 'absolute', bottom: 10, right: 12, fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.08em', color: 'rgba(255,255,255,.7)', background: 'rgba(0,0,0,.5)', borderRadius: 4, padding: '2px 6px', zIndex: 2 }}>
               ↩ resume
             </div>
