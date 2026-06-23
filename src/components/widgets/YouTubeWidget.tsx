@@ -3,12 +3,16 @@ import { useState, useRef, useEffect } from 'react';
 const DEFAULT_V = 'jfKfPfyJRdk';
 
 interface Embed { v?: string; list?: string }
+interface PlayerState { volume: number; muted: boolean }
 
 function embedKey(widgetId?: string) {
   return widgetId ? `wb.widget.youtube.v1.${widgetId}` : 'wb.widget.youtube.v1';
 }
 function resumeKey(widgetId?: string) {
   return widgetId ? `wb.widget.youtube.resume.v1.${widgetId}` : 'wb.widget.youtube.resume.v1';
+}
+function stateKey(widgetId?: string) {
+  return widgetId ? `wb.widget.youtube.state.v1.${widgetId}` : 'wb.widget.youtube.state.v1';
 }
 
 function loadEmbed(widgetId?: string): Embed {
@@ -22,10 +26,10 @@ function loadEmbed(widgetId?: string): Embed {
 
 function parseEmbed(input: string): Embed | null {
   const s = input.trim();
-  const listM = s.match(/[?&]list=([a-zA-Z0-9_-]+)/);
-  const list = listM?.[1];
   const videoM = s.match(/(?:youtube\.com\/(?:watch\?v=|embed\/(?!videoseries)|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
   const v = videoM?.[1] ?? (/^[a-zA-Z0-9_-]{11}$/.test(s) ? s : undefined);
+  // Only treat as playlist when there is no specific video ID to avoid player errors
+  const list = v ? undefined : s.match(/[?&]list=([a-zA-Z0-9_-]+)/)?.[1];
   if (!v && !list) return null;
   return { v, list };
 }
@@ -44,6 +48,20 @@ function saveResume(videoId: string, t: number, widgetId?: string) {
     const saved = JSON.parse(localStorage.getItem(resumeKey(widgetId)) ?? '{}') as Record<string, number>;
     saved[videoId] = Math.floor(t);
     localStorage.setItem(resumeKey(widgetId), JSON.stringify(saved));
+  } catch {}
+}
+
+function loadPlayerState(widgetId?: string): PlayerState {
+  try {
+    const raw = localStorage.getItem(stateKey(widgetId));
+    if (!raw) return { volume: 100, muted: false };
+    return JSON.parse(raw) as PlayerState;
+  } catch { return { volume: 100, muted: false }; }
+}
+
+function savePlayerState(state: PlayerState, widgetId?: string) {
+  try {
+    localStorage.setItem(stateKey(widgetId), JSON.stringify(state));
   } catch {}
 }
 
@@ -83,7 +101,7 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
     const onUpdate = () => { setEmbed(loadEmbed(widgetId)); setActive(false); };
     window.addEventListener('wb:data-updated', onUpdate);
     return () => window.removeEventListener('wb:data-updated', onUpdate);
-  }, []);
+  }, [widgetId]);
 
   // Build / tear down YT player when active
   useEffect(() => {
@@ -98,7 +116,13 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
     const startTick = (vid: string) => {
       stopTick();
       tickRef.current = setInterval(() => {
-        try { const t = playerRef.current?.getCurrentTime?.() ?? 0; saveResume(vid, t, widgetId); } catch {}
+        try {
+          const t = playerRef.current?.getCurrentTime?.() ?? 0;
+          saveResume(vid, t, widgetId);
+          const vol = playerRef.current?.getVolume?.() ?? 100;
+          const muted = playerRef.current?.isMuted?.() ?? false;
+          savePlayerState({ volume: vol, muted }, widgetId);
+        } catch {}
       }, 5000);
     };
 
@@ -120,7 +144,14 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
         videoId: embed.v,
         playerVars: vars,
         events: {
-          onReady: () => {
+          onReady: (e: { target: any }) => {
+            const ps = loadPlayerState(widgetId);
+            if (ps.muted) {
+              e.target.mute();
+            } else {
+              e.target.unMute();
+              e.target.setVolume(ps.volume);
+            }
             // Prevent links inside the player from opening new tabs
             const iframe = containerRef.current?.querySelector('iframe');
             if (iframe && !iframe.hasAttribute('sandbox')) {
@@ -143,6 +174,9 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
       try {
         const t = playerRef.current?.getCurrentTime?.() ?? 0;
         if (videoId) saveResume(videoId, t, widgetId);
+        const vol = playerRef.current?.getVolume?.() ?? 100;
+        const muted = playerRef.current?.isMuted?.() ?? false;
+        savePlayerState({ volume: vol, muted }, widgetId);
         playerRef.current?.destroy?.();
       } catch {}
       playerRef.current = null;
@@ -153,11 +187,17 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
     if (!embed.v) return;
     const videoId = embed.v;
     const onUnload = () => {
-      try { const t = playerRef.current?.getCurrentTime?.() ?? 0; saveResume(videoId, t, widgetId); } catch {}
+      try {
+        const t = playerRef.current?.getCurrentTime?.() ?? 0;
+        saveResume(videoId, t, widgetId);
+        const vol = playerRef.current?.getVolume?.() ?? 100;
+        const muted = playerRef.current?.isMuted?.() ?? false;
+        savePlayerState({ volume: vol, muted }, widgetId);
+      } catch {}
     };
     window.addEventListener('beforeunload', onUnload);
     return () => window.removeEventListener('beforeunload', onUnload);
-  }, [embed.v]);
+  }, [embed.v, widgetId]);
 
   const applyUrl = () => {
     const next = parseEmbed(input);
