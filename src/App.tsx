@@ -260,6 +260,7 @@ export default function App() {
   const [resize, setResize] = useState<ResizeState | null>(null);
   const [toast, setToast] = useState<{ msg: string; kind: string } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [tweaksOpen, setTweaksOpen] = useState(false);
   const [liveAccent, setLiveAccent] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -734,6 +735,7 @@ export default function App() {
             </button>
           )}
           <button onClick={toggleFullscreen} title={isFullscreen ? '全画面を終了' : '全画面表示'}>{isFullscreen ? 'EXIT FULLSCREEN' : 'FULLSCREEN'}</button>
+          <button onClick={() => setTweaksOpen(true)} title="カスタマイズ">TWEAKS</button>
           <button onClick={() => setSettings(true)} title="設定">SETTINGS</button>
           <button className="add" onClick={() => setPicker(true)}>
             <span className="plus">+</span><span>ADD</span>
@@ -863,7 +865,7 @@ export default function App() {
         <div className={`wb-toast ${toast.kind === 'err' ? 'err' : ''}`}>{toast.msg}</div>
       )}
 
-      <TweaksPanel>
+      <TweaksPanel externalOpen={tweaksOpen} onExternalClose={() => setTweaksOpen(false)}>
         <TweakSection label="Preset" />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           {DESIGN_PRESETS.map((p) => {

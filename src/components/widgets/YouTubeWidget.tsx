@@ -108,37 +108,21 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
   const [thumbErr, setThumbErr] = useState(false);
 
   // Volume control state
-  const [volShow,  setVolShow]  = useState(false);
   const [volVal,   setVolVal]   = useState(100);
   const [volMuted, setVolMuted] = useState(false);
-  const volHideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const inputRef     = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef    = useRef<any>(null);
   const tickRef      = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Volume control helpers
+  // Sync volume display from player
   const syncVol = () => {
     try {
       setVolVal(playerRef.current?.getVolume?.() ?? 100);
       setVolMuted(playerRef.current?.isMuted?.() ?? false);
     } catch {}
   };
-  const showVol = () => {
-    if (volHideRef.current) { clearTimeout(volHideRef.current); volHideRef.current = null; }
-    syncVol();
-    setVolShow(true);
-  };
-  const delayHideVol = () => {
-    if (volHideRef.current) clearTimeout(volHideRef.current);
-    volHideRef.current = setTimeout(() => setVolShow(false), 1500);
-  };
-  const cancelHideVol = () => {
-    if (volHideRef.current) { clearTimeout(volHideRef.current); volHideRef.current = null; }
-  };
-  useEffect(() => { return () => { if (volHideRef.current) clearTimeout(volHideRef.current); }; }, []);
-  useEffect(() => { if (!active) { setVolShow(false); cancelHideVol(); } }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset to poster when embed changes
   useEffect(() => { setActive(false); setThumbErr(false); }, [embed]);
@@ -353,63 +337,54 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
       {/* YT player container — mounted when active */}
       {active && <div ref={containerRef} className="yt-player" style={{ position: 'absolute', inset: 0 }} />}
 
-      {/* Custom volume control — floats above the iframe so it never disappears mid-drag */}
+      {/* Custom volume control — always visible while player is active */}
       {active && (
         <div
           style={{ position: 'absolute', bottom: 12, left: 12, zIndex: 6, display: 'flex', alignItems: 'center' }}
-          onPointerEnter={showVol}
-          onPointerLeave={delayHideVol}
           onPointerDown={(e) => e.stopPropagation()}
+          onPointerEnter={syncVol}
         >
-          {/* Volume icon button */}
+          {/* Mute toggle */}
           <button
             onClick={() => {
               try {
                 if (volMuted) { playerRef.current?.unMute(); setVolMuted(false); }
                 else          { playerRef.current?.mute();   setVolMuted(true);  }
               } catch {}
-              showVol(); delayHideVol();
             }}
             style={{
-              width: 30, height: 26,
+              width: 30, height: 24, flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(0,0,0,.60)', backdropFilter: 'blur(6px)',
-              border: '.5px solid rgba(255,255,255,.2)', color: '#fff', cursor: 'pointer',
-              borderRadius: volShow ? '7px 0 0 7px' : 7,
-              transition: 'border-radius .1s',
-              flexShrink: 0,
+              background: 'rgba(0,0,0,.58)', backdropFilter: 'blur(6px)',
+              border: '.5px solid rgba(255,255,255,.18)', borderRight: 'none',
+              borderRadius: '7px 0 0 7px', color: '#fff', cursor: 'pointer',
             }}
           >
             <VolIcon muted={volMuted} vol={volVal} />
           </button>
-
-          {/* Slider — expands to the right, no gap with the button */}
-          {volShow && (
-            <div style={{
-              background: 'rgba(0,0,0,.60)', backdropFilter: 'blur(6px)',
-              border: '.5px solid rgba(255,255,255,.2)', borderLeft: 'none',
-              borderRadius: '0 7px 7px 0', padding: '4px 10px 4px 8px',
-              display: 'flex', alignItems: 'center', height: 26, boxSizing: 'border-box',
-            }}>
-              <input
-                type="range" min={0} max={100}
-                value={volMuted ? 0 : volVal}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  setVolVal(v);
-                  try {
-                    playerRef.current?.setVolume(v);
-                    if (v === 0 && !volMuted) { playerRef.current?.mute();   setVolMuted(true);  }
-                    else if (v > 0 && volMuted) { playerRef.current?.unMute(); setVolMuted(false); }
-                  } catch {}
-                }}
-                onPointerDown={(e) => { e.stopPropagation(); cancelHideVol(); }}
-                onPointerUp={delayHideVol}
-                onPointerCancel={delayHideVol}
-                style={{ width: 80, cursor: 'pointer', accentColor: '#fff', margin: 0, display: 'block' }}
-              />
-            </div>
-          )}
+          {/* Slider */}
+          <div style={{
+            background: 'rgba(0,0,0,.58)', backdropFilter: 'blur(6px)',
+            border: '.5px solid rgba(255,255,255,.18)',
+            borderRadius: '0 7px 7px 0', padding: '0 10px',
+            display: 'flex', alignItems: 'center', height: 24, boxSizing: 'border-box',
+          }}>
+            <input
+              type="range" min={0} max={100}
+              value={volMuted ? 0 : volVal}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setVolVal(v);
+                try {
+                  playerRef.current?.setVolume(v);
+                  if (v === 0 && !volMuted) { playerRef.current?.mute();   setVolMuted(true);  }
+                  else if (v > 0 && volMuted) { playerRef.current?.unMute(); setVolMuted(false); }
+                } catch {}
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              style={{ width: 76, cursor: 'pointer', accentColor: '#fff', margin: 0, display: 'block' }}
+            />
+          </div>
         </div>
       )}
     </div>
