@@ -126,7 +126,35 @@ export function TweaksPanel({ title = 'Tweaks', children }: TweaksPanelProps) {
     window.addEventListener('mouseup', up);
   };
 
-  if (!open) return null;
+  if (!open) return (
+    <>
+      <style>{STYLE}</style>
+      <button
+        onClick={() => setOpen(true)}
+        title="カスタマイズ (Tweaks)"
+        style={{
+          position: 'fixed', right: 16, bottom: 16,
+          zIndex: 2147483645,
+          transform: 'scale(var(--dc-inv-zoom,1))', transformOrigin: 'bottom right',
+          appearance: 'none', border: '.5px solid rgba(0,0,0,.14)',
+          borderRadius: 10,
+          background: 'rgba(250,249,247,.82)',
+          backdropFilter: 'blur(14px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(14px) saturate(160%)',
+          boxShadow: '0 2px 14px rgba(0,0,0,.14)',
+          padding: '6px 11px',
+          font: '500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif',
+          letterSpacing: '.04em',
+          color: 'rgba(41,38,27,.8)',
+          cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 5,
+        }}
+      >
+        <span style={{ fontSize: 13, lineHeight: 1 }}>✦</span>
+        <span>TWEAKS</span>
+      </button>
+    </>
+  );
 
   return (
     <>
