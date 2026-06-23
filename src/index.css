@@ -80,10 +80,10 @@ body.theme-light .wordmark{color:rgba(60,60,80,.5)}
 body.theme-light .w{background:rgba(255,255,255,.62);border-color:rgba(60,60,80,.08);box-shadow:0 1px 0 rgba(255,255,255,.9) inset,0 8px 28px rgba(40,40,60,.07);color:#2a2b30}
 .w:hover{border-color:rgba(255,255,255,.14)}
 body.theme-light .w:hover{border-color:rgba(0,0,0,.12)}
-.w.dragging{transition:none;z-index:30;box-shadow:0 22px 60px rgba(0,0,0,.6);cursor:grabbing;transform:scale(1.035);border-color:rgba(255,255,255,.22)}
+.w.dragging{transition:none;z-index:30;box-shadow:0 22px 60px rgba(0,0,0,.6);cursor:grabbing;border-color:rgba(255,255,255,.22)}
 body.theme-light .w.dragging{box-shadow:0 20px 50px rgba(40,40,60,.22);border-color:rgba(0,0,0,.18)}
 .w.dragging.invalid{box-shadow:0 22px 60px rgba(255,80,90,.35);border-color:rgba(255,120,130,.55);animation:nope .25s ease}
-@keyframes nope{0%,100%{transform:scale(1.035) translateX(0)}25%{transform:scale(1.035) translateX(-3px)}75%{transform:scale(1.035) translateX(3px)}}
+@keyframes nope{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 .w.resizing{transition:none;z-index:30}
 .w.reflowing{transition:left .32s cubic-bezier(.22,.7,.18,1),top .32s cubic-bezier(.22,.7,.18,1),width .32s cubic-bezier(.22,.7,.18,1),height .32s cubic-bezier(.22,.7,.18,1)}
 .grid.is-editing .w:not(.dragging){animation:wiggle .5s ease-in-out infinite alternate}

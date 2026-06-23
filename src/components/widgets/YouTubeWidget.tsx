@@ -224,8 +224,8 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
 
   return (
     <div className="w-body" style={{ padding: 0 }}>
-      {/* Header overlay */}
-      <div style={{ position: 'absolute', top: 28, left: 0, right: 0, padding: '6px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 3, background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 100%)', pointerEvents: 'none' }}>
+      {/* Header overlay — pointer-events:auto so this area acts as a drag handle */}
+      <div style={{ position: 'absolute', top: 28, left: 0, right: 0, padding: '6px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 3, background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 100%)' }}>
         <div className="w-head" style={{ margin: 0, color: '#fff', pointerEvents: 'none' }}>
           <div className="title">
             <span className="glyph" style={{ background: '#ff3355', boxShadow: '0 0 8px #ff3355' }} />
