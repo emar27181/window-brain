@@ -20,6 +20,7 @@ export interface TweakValues {
   typeface: string;
   displayFont: string;
   weight: number;
+  theme?: string;
 }
 
 export interface AccentConfig {

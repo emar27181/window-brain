@@ -69,7 +69,7 @@ body.theme-light .wordmark{color:rgba(60,60,80,.5)}
   pointer-events:none}
 
 /* Widget cards */
-.w{position:absolute;border-radius:18px;overflow:hidden;
+.w{position:absolute;border-radius:var(--w-radius,18px);overflow:hidden;
   background:rgba(22,25,33,.55);
   border:.5px solid rgba(255,255,255,.07);
   box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 8px 30px rgba(0,0,0,.35);
@@ -404,3 +404,44 @@ body.theme-light .arr-tile{background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.0
 .arr-size{font-family:var(--font-mono);font-size:9px;color:var(--ink-faint);letter-spacing:.06em;flex-shrink:0}
 .arr-remove{background:none;border:none;color:var(--ink-faint);cursor:pointer;padding:2px 5px;font-size:15px;border-radius:4px;flex-shrink:0;line-height:1;transition:color .15s}
 .arr-remove:active{color:#ff6a7a}
+
+/* ─── Pixel / Retro theme ─────────────────────────────────────── */
+body.theme-pixel{
+  --w-radius:3px;
+  -webkit-font-smoothing:none;
+  image-rendering:pixelated;
+}
+/* Square widget corners */
+body.theme-pixel .w{border-radius:var(--w-radius);border-color:var(--accent,.5)}
+body.theme-pixel .w:hover{border-color:var(--accent)}
+/* Square dock buttons */
+body.theme-pixel .dock button{border-radius:2px}
+/* Ghost / drag indicators */
+body.theme-pixel .ghost{border-radius:var(--w-radius)}
+/* Neon glow on accent elements */
+body.theme-pixel .w-head .glyph{
+  border-radius:1px;
+  box-shadow:0 0 0 1px var(--accent),0 0 8px var(--accent);
+}
+/* CRT scanlines overlay (pseudo-element on html so it covers everything) */
+body.theme-pixel::after{
+  content:'';
+  position:fixed;inset:0;
+  background:repeating-linear-gradient(
+    transparent 0px,transparent 2px,
+    rgba(0,0,0,.18) 2px,rgba(0,0,0,.18) 4px
+  );
+  pointer-events:none;
+  z-index:9998;
+}
+/* Neon text glow on widget labels */
+body.theme-pixel .w-head{
+  color:var(--accent);
+  letter-spacing:.22em;
+  text-shadow:0 0 6px var(--accent);
+}
+/* Add pixel border style to close / resize buttons */
+body.theme-pixel .w .close{border-radius:2px}
+/* Sharp picker + toast */
+body.theme-pixel .picker{border-radius:4px}
+body.theme-pixel .wb-toast{border-radius:3px}

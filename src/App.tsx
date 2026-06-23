@@ -17,6 +17,7 @@ const ACCENTS: Record<string, AccentConfig> = {
   sunset:   { color: '#ff9a6c', label: 'SUNSET',   palette: ['#ff9a6c','#ff6e8a','#ffcb6c'] },
   lavender: { color: '#c6a0ff', label: 'LAVENDER', palette: ['#c6a0ff','#9a85ff','#ffaaff'] },
   sage:     { color: '#9ad6a5', label: 'SAGE',     palette: ['#9ad6a5','#7ab8a0','#c5dba0'] },
+  neon:     { color: '#39ff14', label: 'NEON',     palette: ['#39ff14','#00e5ff','#ff007f'] },
 };
 
 const BG_OPTIONS: BgOption[] = [
@@ -32,6 +33,7 @@ const TYPEFACES: Record<string, TypefaceConfig> = {
   inter:  { label: 'Inter',    sans: '"Inter", ui-sans-serif, sans-serif',           mono: '"JetBrains Mono", ui-monospace, monospace' },
   plex:   { label: 'IBM Plex', sans: '"IBM Plex Sans", ui-sans-serif, sans-serif',   mono: '"IBM Plex Mono", ui-monospace, monospace' },
   system: { label: 'System',   sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, sans-serif', mono: 'ui-monospace, "SF Mono", Menlo, monospace' },
+  pixel:  { label: 'Pixel',    sans: '"Pixelify Sans", monospace',                  mono: '"VT323", monospace' },
 };
 
 const DISPLAY_FONTS: Record<string, DisplayFontConfig> = {
@@ -39,6 +41,50 @@ const DISPLAY_FONTS: Record<string, DisplayFontConfig> = {
   fraunces:   { label: 'Fraunces',         css: '"Fraunces", serif' },
   match:      { label: 'Match sans',       css: 'inherit' },
 };
+
+interface DesignPreset {
+  id: string;
+  name: string;
+  badge: string;
+  previewBg: string;
+  previewAccent: string;
+  tweaks: Partial<TweakValues>;
+}
+
+const DESIGN_PRESETS: DesignPreset[] = [
+  {
+    id: 'lavender',
+    name: 'Lavender',
+    badge: '🌙',
+    previewBg: '#0d0f1a',
+    previewAccent: '#c6a0ff',
+    tweaks: { dark: true, accent: 'lavender', background: 'time', typeface: 'geist', displayFont: 'instrument', weight: 300, density: 'regular', theme: undefined },
+  },
+  {
+    id: 'aurora',
+    name: 'Aurora',
+    badge: '✦',
+    previewBg: '#080e1e',
+    previewAccent: '#9aa6ff',
+    tweaks: { dark: true, accent: 'aurora', background: 'aurora', typeface: 'geist', displayFont: 'instrument', weight: 500, density: 'regular', theme: undefined },
+  },
+  {
+    id: 'paper',
+    name: 'Paper',
+    badge: '☀',
+    previewBg: '#f0ebe0',
+    previewAccent: '#9ad6a5',
+    tweaks: { dark: false, accent: 'sage', background: 'paper', typeface: 'plex', displayFont: 'fraunces', weight: 400, density: 'regular', theme: undefined },
+  },
+  {
+    id: 'pixel',
+    name: 'PIXEL',
+    badge: '👾',
+    previewBg: '#000a00',
+    previewAccent: '#39ff14',
+    tweaks: { dark: true, accent: 'neon', background: 'midnight', typeface: 'pixel', displayFont: 'match', weight: 400, density: 'compact', theme: 'pixel' },
+  },
+];
 
 const TWEAK_DEFAULTS: TweakValues = {
   dark: true,
@@ -130,6 +176,7 @@ export default function App() {
   // Sync CSS variables to DOM
   useState(() => {
     document.body.classList.toggle('theme-light', !t.dark);
+    document.body.classList.toggle('theme-pixel', t.theme === 'pixel');
     document.body.classList.remove('density-compact', 'density-regular', 'density-cozy');
     document.body.classList.add(`density-${t.density}`);
     document.documentElement.style.setProperty('--accent', accent.color);
@@ -142,6 +189,7 @@ export default function App() {
   // Also update on changes via useEffect pattern inline
   const applyTheme = useCallback(() => {
     document.body.classList.toggle('theme-light', !t.dark);
+    document.body.classList.toggle('theme-pixel', t.theme === 'pixel');
     document.body.classList.remove('density-compact', 'density-regular', 'density-cozy');
     document.body.classList.add(`density-${t.density}`);
     document.documentElement.style.setProperty('--accent', accent.color);
@@ -149,7 +197,7 @@ export default function App() {
     document.body.style.setProperty('--font-mono', typeface.mono);
     document.body.style.setProperty('--font-display', displayFont.css === 'inherit' ? typeface.sans : displayFont.css);
     document.body.style.setProperty('--w-base', String(t.weight));
-  }, [t.dark, t.density, accent.color, typeface, displayFont, t.weight]);
+  }, [t.dark, t.theme, t.density, accent.color, typeface, displayFont, t.weight]);
   applyTheme();
 
   // Persist layout
@@ -678,6 +726,40 @@ export default function App() {
       )}
 
       <TweaksPanel>
+        <TweakSection label="Preset" />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          {DESIGN_PRESETS.map((p) => {
+            const active = t.accent === (p.tweaks.accent ?? '') && t.typeface === (p.tweaks.typeface ?? '') && t.dark === p.tweaks.dark && (t.theme ?? '') === (p.tweaks.theme ?? '');
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setTweak(p.tweaks)}
+                style={{
+                  appearance: 'none', border: active ? '1.5px solid rgba(0,0,0,.55)' : '1px solid rgba(0,0,0,.12)',
+                  borderRadius: 9, padding: 0, cursor: 'pointer', overflow: 'hidden',
+                  background: 'transparent', textAlign: 'left',
+                  boxShadow: active ? 'inset 0 0 0 1px rgba(255,255,255,.4)' : 'none',
+                  opacity: 1,
+                }}
+              >
+                <div style={{
+                  height: 36, background: p.previewBg,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                }}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: p.previewAccent, boxShadow: `0 0 6px ${p.previewAccent}` }} />
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: p.previewAccent, opacity: .5 }} />
+                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: p.previewAccent, opacity: .25 }} />
+                </div>
+                <div style={{ padding: '5px 8px', fontSize: 10, fontWeight: 600, letterSpacing: '.04em', color: 'rgba(41,38,27,.8)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span>{p.badge}</span><span>{p.name}</span>
+                  {active && <span style={{ marginLeft: 'auto', fontSize: 9, color: 'rgba(41,38,27,.45)' }}>✓</span>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
         <TweakSection label="Appearance" />
         <TweakToggle label="Dark mode" value={t.dark} onChange={(v) => setTweak('dark', v)} />
 
