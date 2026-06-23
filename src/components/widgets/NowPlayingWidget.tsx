@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Size } from '../../types';
+import { extractDominantColor, dispatchLiveColor } from '../../lib/colorExtract';
 
 const STORAGE_KEY = 'wb.widget.music.v1';
 const DEFAULT_V = 'jfKfPfyJRdk';
@@ -43,6 +44,13 @@ export function NowPlayingWidget({ size }: { size: Size }) {
   const [playing, setPlaying] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const iframeKey = useRef(0);
+
+  // Extract dominant color from thumbnail and broadcast as live accent
+  useEffect(() => {
+    if (!embed.v) { dispatchLiveColor(null); return; }
+    const thumbUrl = `https://i.ytimg.com/vi/${embed.v}/hqdefault.jpg`;
+    extractDominantColor(thumbUrl).then(dispatchLiveColor).catch(() => dispatchLiveColor(null));
+  }, [embed.v]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let alive = true;
@@ -125,7 +133,7 @@ export function NowPlayingWidget({ size }: { size: Size }) {
               boxShadow: '0 6px 20px rgba(0,0,0,.4)',
             }}>
               {meta?.thumb && (
-                <img src={meta.thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={meta.thumb} alt="" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               )}
             </div>
 

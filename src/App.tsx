@@ -134,6 +134,7 @@ export default function App() {
   const [resize, setResize] = useState<ResizeState | null>(null);
   const [toast, setToast] = useState<{ msg: string; kind: string } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [liveAccent, setLiveAccent] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const vw = useViewport();
@@ -173,7 +174,7 @@ export default function App() {
   const typeface = TYPEFACES[t.typeface] ?? TYPEFACES.geist;
   const displayFont = DISPLAY_FONTS[t.displayFont] ?? DISPLAY_FONTS.instrument;
 
-  // Sync CSS variables to DOM
+  // Sync CSS variables to DOM (initial render)
   useState(() => {
     document.body.classList.toggle('theme-light', !t.dark);
     document.body.classList.toggle('theme-pixel', t.theme === 'pixel');
@@ -184,6 +185,7 @@ export default function App() {
     document.body.style.setProperty('--font-mono', typeface.mono);
     document.body.style.setProperty('--font-display', displayFont.css === 'inherit' ? typeface.sans : displayFont.css);
     document.body.style.setProperty('--w-base', String(t.weight));
+    // liveAccent is null at init, so accent.color is correct here
   });
 
   // Also update on changes via useEffect pattern inline
@@ -192,18 +194,28 @@ export default function App() {
     document.body.classList.toggle('theme-pixel', t.theme === 'pixel');
     document.body.classList.remove('density-compact', 'density-regular', 'density-cozy');
     document.body.classList.add(`density-${t.density}`);
-    document.documentElement.style.setProperty('--accent', accent.color);
+    document.documentElement.style.setProperty('--accent', liveAccent ?? accent.color);
     document.body.style.setProperty('--font-sans', typeface.sans);
     document.body.style.setProperty('--font-mono', typeface.mono);
     document.body.style.setProperty('--font-display', displayFont.css === 'inherit' ? typeface.sans : displayFont.css);
     document.body.style.setProperty('--w-base', String(t.weight));
-  }, [t.dark, t.theme, t.density, accent.color, typeface, displayFont, t.weight]);
+  }, [t.dark, t.theme, t.density, liveAccent, accent.color, typeface, displayFont, t.weight]);
   applyTheme();
 
   // Persist layout
   const saveLayout = (l: WidgetItem[]) => {
     try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(l)); } catch {}
   };
+
+  // Listen for live color from music/video widgets
+  useEffect(() => {
+    const onLiveColor = (e: Event) => {
+      const ce = e as CustomEvent<{ color: string | null }>;
+      setLiveAccent(ce.detail.color ?? null);
+    };
+    window.addEventListener('wb:live-color', onLiveColor);
+    return () => window.removeEventListener('wb:live-color', onLiveColor);
+  }, []);
 
   // ─── Fullscreen ───────────────────────────────────────────────
   useEffect(() => {

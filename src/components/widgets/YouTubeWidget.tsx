@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { extractDominantColor, dispatchLiveColor } from '../../lib/colorExtract';
 
 const DEFAULT_V = 'jfKfPfyJRdk';
 
@@ -95,6 +96,15 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
 
   // Reset to poster when embed changes
   useEffect(() => { setActive(false); setThumbErr(false); }, [embed]);
+
+  // Extract dominant color from thumbnail and broadcast as live accent
+  useEffect(() => {
+    if (!embed.v) { dispatchLiveColor(null); return; }
+    const url = thumbErr
+      ? `https://i.ytimg.com/vi/${embed.v}/hqdefault.jpg`
+      : `https://i.ytimg.com/vi/${embed.v}/maxresdefault.jpg`;
+    extractDominantColor(url).then(dispatchLiveColor).catch(() => dispatchLiveColor(null));
+  }, [embed.v, thumbErr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reload from localStorage after import
   useEffect(() => {
@@ -252,6 +262,7 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
             <img
               src={thumbUrl}
               alt=""
+              crossOrigin="anonymous"
               onError={() => { if (!thumbErr) setThumbErr(true); }}
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: .85 }}
             />
