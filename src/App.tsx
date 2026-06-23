@@ -123,6 +123,132 @@ function loadLayout(): WidgetItem[] {
   return DEFAULT_LAYOUT;
 }
 
+// ─── Layout Presets ───────────────────────────────────────────────
+
+interface LayoutPreset {
+  id: string;
+  name: string;
+  badge: string;
+  description: string;
+  items: WidgetItem[];
+}
+
+function miniColor(type: string): string {
+  const MAP: Record<string, string> = {
+    clock:    'rgba(154,166,255,.48)',
+    youtube:  'rgba(255,55,55,.40)',
+    music:    'rgba(190,80,255,.34)',
+    todo:     'rgba(80,210,165,.30)',
+    notes:    'rgba(255,210,60,.24)',
+    calendar: 'rgba(60,170,255,.30)',
+    pomodoro: 'rgba(255,130,60,.30)',
+    github:   'rgba(80,210,80,.30)',
+    markets:  'rgba(100,230,130,.30)',
+    ghpet:    'rgba(255,160,60,.32)',
+    weather:  'rgba(120,200,255,.26)',
+  };
+  return MAP[type] ?? 'rgba(255,255,255,.11)';
+}
+
+const MINI_ICONS: Record<string, string> = {
+  clock: '◷', youtube: '▶', music: '♪', todo: '≡',
+  notes: '✏', calendar: '▦', pomodoro: '⊙', github: '◈',
+  markets: '$', weather: '☁', ghpet: '♥', timer: '⏱',
+  alarm: '⏰', sticky: '▫', habit: '✦', mood: '◡',
+};
+
+function LayoutPreviewMini({ items }: { items: WidgetItem[] }) {
+  return (
+    <div style={{
+      position: 'relative', width: '100%', height: 56,
+      background: 'rgba(0,0,0,.38)', borderRadius: '6px 6px 0 0', overflow: 'hidden',
+    }}>
+      {items.map((item) => (
+        <div key={item.id} style={{
+          position: 'absolute',
+          left: `calc(${((item.x - 1) / 13) * 100}% + 1.5px)`,
+          top: `calc(${((item.y - 1) / 6) * 100}% + 1.5px)`,
+          width: `calc(${(item.w / 13) * 100}% - 3px)`,
+          height: `calc(${(item.h / 6) * 100}% - 3px)`,
+          background: miniColor(item.type),
+          border: '.5px solid rgba(255,255,255,.2)',
+          borderRadius: 2,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          overflow: 'hidden', boxSizing: 'border-box',
+        }}>
+          <span style={{ fontSize: 7, color: 'rgba(255,255,255,.6)', lineHeight: 1, userSelect: 'none' }}>
+            {MINI_ICONS[item.type] ?? '·'}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const LAYOUT_PRESETS: LayoutPreset[] = [
+  {
+    id: 'lp-standard',
+    name: 'スタンダード',
+    badge: '⊞',
+    description: 'バランスの取れた定番配置',
+    items: DEFAULT_LAYOUT,
+  },
+  {
+    id: 'lp-cinema',
+    name: 'シネマ',
+    badge: '▶',
+    description: '時計中央・動画5本・タスクサイド',
+    items: [
+      { id: 'cinema-yt1',   type: 'youtube',  x: 1,  y: 1, w: 4, h: 3 },
+      { id: 'cinema-clock', type: 'clock',    x: 5,  y: 1, w: 4, h: 3 },
+      { id: 'cinema-yt2',   type: 'youtube',  x: 9,  y: 1, w: 3, h: 3 },
+      { id: 'cinema-task',  type: 'todo',     x: 12, y: 1, w: 2, h: 6 },
+      { id: 'cinema-yt3',   type: 'youtube',  x: 1,  y: 4, w: 4, h: 3 },
+      { id: 'cinema-yt4',   type: 'youtube',  x: 5,  y: 4, w: 4, h: 3 },
+      { id: 'cinema-yt5',   type: 'youtube',  x: 9,  y: 4, w: 3, h: 3 },
+    ],
+  },
+  {
+    id: 'lp-focus',
+    name: 'フォーカス',
+    badge: '◉',
+    description: '大きな時計＋ポモドーロ＋メモ',
+    items: [
+      { id: 'focus-clock', type: 'clock',    x: 1,  y: 1, w: 4, h: 6 },
+      { id: 'focus-pomo',  type: 'pomodoro', x: 5,  y: 1, w: 5, h: 3 },
+      { id: 'focus-todo',  type: 'todo',     x: 5,  y: 4, w: 5, h: 3 },
+      { id: 'focus-note',  type: 'notes',    x: 10, y: 1, w: 4, h: 6 },
+    ],
+  },
+  {
+    id: 'lp-media',
+    name: 'メディア',
+    badge: '♫',
+    description: '音楽＋動画メインステージ',
+    items: [
+      { id: 'media-clock', type: 'clock',    x: 1,  y: 1, w: 3, h: 3 },
+      { id: 'media-music', type: 'music',    x: 1,  y: 4, w: 3, h: 3 },
+      { id: 'media-yt1',   type: 'youtube',  x: 4,  y: 1, w: 6, h: 4 },
+      { id: 'media-yt2',   type: 'youtube',  x: 4,  y: 5, w: 6, h: 2 },
+      { id: 'media-todo',  type: 'todo',     x: 10, y: 1, w: 4, h: 3 },
+      { id: 'media-mkt',   type: 'markets',  x: 10, y: 4, w: 4, h: 3 },
+    ],
+  },
+  {
+    id: 'lp-command',
+    name: 'コマンド',
+    badge: '⌘',
+    description: 'カレンダー＋GitHub＋メモ中央',
+    items: [
+      { id: 'cmd-clock',  type: 'clock',    x: 1, y: 1, w: 3, h: 3 },
+      { id: 'cmd-todo',   type: 'todo',     x: 1, y: 4, w: 3, h: 3 },
+      { id: 'cmd-notes',  type: 'notes',    x: 4, y: 1, w: 5, h: 6 },
+      { id: 'cmd-cal',    type: 'calendar', x: 9, y: 1, w: 5, h: 3 },
+      { id: 'cmd-github', type: 'github',   x: 9, y: 4, w: 5, h: 3 },
+    ],
+  },
+];
+
 // ─── App ─────────────────────────────────────────────────────────
 
 export default function App() {
@@ -805,7 +931,28 @@ export default function App() {
           onChange={(v) => setTweak('weight', v as number)} />
 
         <TweakSection label="Layout" />
-        <TweakButton label="レイアウトをリセット" onClick={resetLayout} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {LAYOUT_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => { setLayout(p.items); saveLayout(p.items); }}
+              style={{
+                appearance: 'none', border: '1px solid rgba(0,0,0,.12)',
+                borderRadius: 9, padding: 0, cursor: 'pointer', overflow: 'hidden',
+                background: 'transparent', textAlign: 'left',
+              }}
+            >
+              <LayoutPreviewMini items={p.items} />
+              <div style={{ padding: '5px 8px 6px', fontSize: 10, fontWeight: 600, letterSpacing: '.04em', color: 'rgba(41,38,27,.8)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span>{p.badge}</span>
+                <span>{p.name}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 400, opacity: .45 }}>{p.description}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+        <TweakButton label="現在のレイアウトをリセット" onClick={resetLayout} />
       </TweaksPanel>
 
       {/* ─── Mobile expand overlay ─────────────────────── */}
