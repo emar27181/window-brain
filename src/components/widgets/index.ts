@@ -23,6 +23,7 @@ import { FocusWidget } from './FocusWidget';
 import { DayCalendarWidget } from './DayCalendarWidget';
 import { TimerWidget } from './TimerWidget';
 import { AlarmWidget } from './AlarmWidget';
+import { GithubPetWidget } from './GithubPetWidget';
 
 export const WIDGET_REGISTRY: WidgetDef[] = [
   { type: 'clock',     label: '時計',         Component: ClockWidget,      defaultSize: { w: 2, h: 2 } },
@@ -49,6 +50,7 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { type: 'daycal',   label: '一日カレンダー', Component: DayCalendarWidget, defaultSize: { w: 2, h: 4 } },
   { type: 'timer',    label: 'タイマー',       Component: TimerWidget,       defaultSize: { w: 2, h: 2 } },
   { type: 'alarm',    label: 'アラーム',       Component: AlarmWidget,       defaultSize: { w: 2, h: 2 } },
+  { type: 'ghpet',   label: 'GitHub ペット',  Component: GithubPetWidget,   defaultSize: { w: 2, h: 3 } },
 ];
 
 // 全幅(1〜13) × 全高(1〜6) の任意サイズを許可
@@ -66,5 +68,5 @@ export {
   PomodoroWidget, GithubWidget, SystemWidget,
   CountdownWidget, HabitWidget, MoodWidget, BooksWidget, WorkoutWidget,
   ForexWidget, RssWidget, StickyWidget, FocusWidget, DayCalendarWidget,
-  TimerWidget, AlarmWidget,
+  TimerWidget, AlarmWidget, GithubPetWidget,
 };
