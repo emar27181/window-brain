@@ -247,6 +247,20 @@ const LAYOUT_PRESETS: LayoutPreset[] = [
       { id: 'cmd-github', type: 'github',   x: 9, y: 4, w: 5, h: 3 },
     ],
   },
+  {
+    id: 'lp-stage',
+    name: 'ステージ',
+    badge: '⊡',
+    description: '動画4本＋時計＋タスク中央',
+    items: [
+      { id: 'stage-yt1',   type: 'youtube',  x: 1,  y: 1, w: 5, h: 3 },
+      { id: 'stage-clock', type: 'clock',    x: 6,  y: 1, w: 3, h: 3 },
+      { id: 'stage-yt2',   type: 'youtube',  x: 9,  y: 1, w: 5, h: 3 },
+      { id: 'stage-yt3',   type: 'youtube',  x: 1,  y: 4, w: 5, h: 3 },
+      { id: 'stage-todo',  type: 'todo',     x: 6,  y: 4, w: 3, h: 3 },
+      { id: 'stage-yt4',   type: 'youtube',  x: 9,  y: 4, w: 5, h: 3 },
+    ],
+  },
 ];
 
 // ─── App ─────────────────────────────────────────────────────────
@@ -876,10 +890,13 @@ export default function App() {
                 type="button"
                 onClick={() => setTweak(p.tweaks)}
                 style={{
-                  appearance: 'none', border: active ? '1.5px solid rgba(0,0,0,.55)' : '1px solid rgba(0,0,0,.12)',
+                  appearance: 'none',
+                  border: active
+                    ? `1.5px solid ${t.dark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.55)'}`
+                    : `1px solid ${t.dark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.12)'}`,
                   borderRadius: 9, padding: 0, cursor: 'pointer', overflow: 'hidden',
                   background: 'transparent', textAlign: 'left',
-                  boxShadow: active ? 'inset 0 0 0 1px rgba(255,255,255,.4)' : 'none',
+                  boxShadow: active ? `inset 0 0 0 1px ${t.dark ? 'rgba(0,0,0,.3)' : 'rgba(255,255,255,.4)'}` : 'none',
                   opacity: 1,
                 }}
               >
@@ -891,9 +908,9 @@ export default function App() {
                   <div style={{ width: 7, height: 7, borderRadius: '50%', background: p.previewAccent, opacity: .5 }} />
                   <div style={{ width: 5, height: 5, borderRadius: '50%', background: p.previewAccent, opacity: .25 }} />
                 </div>
-                <div style={{ padding: '5px 8px', fontSize: 10, fontWeight: 600, letterSpacing: '.04em', color: 'rgba(41,38,27,.8)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ padding: '5px 8px', fontSize: 10, fontWeight: 600, letterSpacing: '.04em', color: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}>
                   <span>{p.badge}</span><span>{p.name}</span>
-                  {active && <span style={{ marginLeft: 'auto', fontSize: 9, color: 'rgba(41,38,27,.45)' }}>✓</span>}
+                  {active && <span style={{ marginLeft: 'auto', fontSize: 9, opacity: .5 }}>✓</span>}
                 </div>
               </button>
             );
@@ -940,13 +957,14 @@ export default function App() {
               type="button"
               onClick={() => { setLayout(p.items); saveLayout(p.items); }}
               style={{
-                appearance: 'none', border: '1px solid rgba(0,0,0,.12)',
+                appearance: 'none',
+                border: `1px solid ${t.dark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.12)'}`,
                 borderRadius: 9, padding: 0, cursor: 'pointer', overflow: 'hidden',
                 background: 'transparent', textAlign: 'left',
               }}
             >
               <LayoutPreviewMini items={p.items} />
-              <div style={{ padding: '5px 8px 6px', fontSize: 10, fontWeight: 600, letterSpacing: '.04em', color: 'rgba(41,38,27,.8)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div style={{ padding: '5px 8px 6px', fontSize: 10, fontWeight: 600, letterSpacing: '.04em', color: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span>{p.badge}</span>
                 <span>{p.name}</span>
                 <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 400, opacity: .45 }}>{p.description}</span>
