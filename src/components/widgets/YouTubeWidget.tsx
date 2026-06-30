@@ -27,7 +27,7 @@ function loadEmbed(widgetId?: string): Embed {
 
 function parseEmbed(input: string): Embed | null {
   const s = input.trim();
-  const videoM = s.match(/(?:youtube\.com\/(?:watch\?v=|embed\/(?!videoseries)|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  const videoM = s.match(/(?:youtube\.com\/(?:watch\?v=|embed\/(?!videoseries)|shorts\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
   const v = videoM?.[1] ?? (/^[a-zA-Z0-9_-]{11}$/.test(s) ? s : undefined);
   // Only treat as playlist when there is no specific video ID to avoid player errors
   const list = v ? undefined : s.match(/[?&]list=([a-zA-Z0-9_-]+)/)?.[1];

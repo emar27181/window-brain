@@ -21,7 +21,7 @@ function parseEmbed(input: string): Embed | null {
   const s = input.trim();
   const listM = s.match(/[?&]list=([a-zA-Z0-9_-]+)/);
   const list = listM?.[1];
-  const videoM = s.match(/(?:youtube\.com\/(?:watch\?v=|embed\/(?!videoseries)|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  const videoM = s.match(/(?:youtube\.com\/(?:watch\?v=|embed\/(?!videoseries)|shorts\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
   const v = videoM?.[1] ?? (/^[a-zA-Z0-9_-]{11}$/.test(s) ? s : undefined);
   if (!v && !list) return null;
   return { v, list };
@@ -44,6 +44,13 @@ export function NowPlayingWidget({ size }: { size: Size }) {
   const [playing, setPlaying] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const iframeKey = useRef(0);
+
+  // Reload from localStorage after import
+  useEffect(() => {
+    const onUpdate = () => { setEmbed(loadEmbed()); setPlaying(false); };
+    window.addEventListener('wb:data-updated', onUpdate);
+    return () => window.removeEventListener('wb:data-updated', onUpdate);
+  }, []);
 
   // Extract dominant color from thumbnail and broadcast as live accent
   useEffect(() => {
