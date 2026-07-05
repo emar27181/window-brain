@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(git check-ignore *)",
+      "Bash(netlify status *)"
+    ],
+    "deny": [
+      "Bash(git checkout *)"
+    ]
+  }
+}
