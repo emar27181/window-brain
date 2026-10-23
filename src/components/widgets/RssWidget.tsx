@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Head } from '../Head';
 import type { Size } from '../../types';
+import { copyToClipboard } from '../../lib/copyToClipboard';
 
 const LEGACY_URL_KEY = 'wb.rss.v1';
 const DEFAULT_URL = 'https://feeds.bbci.co.uk/news/world/rss.xml';
@@ -51,6 +52,7 @@ export function RssWidget({ size, widgetId }: { size: Size; widgetId?: string })
   const [items, setItems] = useState<RssItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(false);
+  const [copied, setCopied] = useState(false);
   const dateKey = localDateKey();
   const [dailyLink, setDailyLink] = useState(() => {
     try { return localStorage.getItem(dailySelectionKey(widgetId, dateKey)) ?? ''; } catch { return ''; }
@@ -107,6 +109,13 @@ export function RssWidget({ size, widgetId }: { size: Size; widgetId?: string })
     setEditingUrl(false);
   };
 
+  const copyFeedUrl = async () => {
+    if (await copyToClipboard(feedUrl)) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    }
+  };
+
   const selectedIndex = items.length ? Math.max(0, items.findIndex((item) => item.link === dailyLink)) : -1;
   const dailyItem = selectedIndex >= 0 ? items[selectedIndex] : null;
   const visible = daily ? items.filter((_, index) => index !== selectedIndex).slice(0, size.h >= 3 ? 8 : 4) : items.slice(0, size.h >= 3 ? 12 : size.h >= 2 ? 7 : 4);
@@ -116,7 +125,7 @@ export function RssWidget({ size, widgetId }: { size: Size; widgetId?: string })
   return (
     <div className="w-body">
       <Head title={daily ? 'NEWS · DAILY' : 'RSS'} right={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 24, minWidth: 0 }}>
           {err && <span style={{ fontSize: 9, color: '#ff7a8a', fontFamily: 'var(--font-mono)' }}>ERROR</span>}
           <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { const next = !daily; setDaily(next); persist(feedUrl, next); }}
             title="日付ごとに同じニュースを選びます"
@@ -126,6 +135,10 @@ export function RssWidget({ size, widgetId }: { size: Size; widgetId?: string })
           <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { setUrlInput(feedUrl); setEditingUrl(true); }}
             style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, padding: '1px 3px', letterSpacing: '.08em', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {shortDomain(feedUrl)} ✎
+          </button>
+          <button onPointerDown={(e) => e.stopPropagation()} onClick={copyFeedUrl} title="RSS URLをコピーして共有" aria-label="RSS URLをコピーして共有"
+            style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, padding: '1px 3px', flexShrink: 0 }}>
+            {copied ? 'COPIED' : 'COPY'}
           </button>
         </div>
       } />

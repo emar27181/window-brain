@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { extractDominantColor, dispatchLiveColor } from '../../lib/colorExtract';
+import { copyToClipboard } from '../../lib/copyToClipboard';
 
 const DEFAULT_V = 'jfKfPfyJRdk';
 
@@ -159,6 +160,7 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [playlistItems, setPlaylistItems] = useState<PlaylistItem[]>([]);
   const [templates, setTemplates] = useState<SavedTemplate[]>(loadTemplates);
+  const [copied, setCopied] = useState(false);
   const templateInputRef = useRef<HTMLInputElement>(null);
 
   // Volume control state
@@ -367,6 +369,13 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
     setInput('');
   };
 
+  const copyMediaUrl = async () => {
+    if (await copyToClipboard(mediaUrl(embed))) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    }
+  };
+
   const startEditing = (e: React.MouseEvent) => {
     e.stopPropagation();
     setInput('');
@@ -383,20 +392,27 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
   return (
     <div className="w-body" style={{ padding: 0 }}>
       {/* Header overlay — pointer-events:auto so this area acts as a drag handle */}
-      <div style={{ position: 'absolute', top: 28, left: 0, right: 0, padding: '6px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 3, background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 100%)' }}>
+      <div style={{ position: 'absolute', top: 28, left: 0, right: 0, padding: '6px 38px 6px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 3, background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 100%)' }}>
         <div className="w-head" style={{ margin: 0, color: '#fff', pointerEvents: 'none' }}>
           <div className="title">
             <span className="glyph" style={{ background: '#ff3355', boxShadow: '0 0 8px #ff3355' }} />
             YOUTUBE
           </div>
         </div>
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={startEditing}
-          style={{ background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(8px)', border: '.5px solid rgba(255,255,255,.25)', color: '#fff', borderRadius: 6, padding: '3px 9px', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.12em', cursor: 'pointer', pointerEvents: 'auto' }}
-        >
-          URL ✎
-        </button>
+        <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={copyMediaUrl}
+            title="動画URLをコピーして共有"
+            aria-label="動画URLをコピーして共有"
+            style={{ background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(8px)', border: '.5px solid rgba(255,255,255,.25)', color: '#fff', borderRadius: 6, padding: '3px 7px', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.08em', cursor: 'pointer', pointerEvents: 'auto' }}
+          >{copied ? 'COPIED' : 'COPY'}</button>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={startEditing}
+            style={{ background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(8px)', border: '.5px solid rgba(255,255,255,.25)', color: '#fff', borderRadius: 6, padding: '3px 8px', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.08em', cursor: 'pointer', pointerEvents: 'auto' }}
+          >URL ✎</button>
+        </div>
       </div>
 
       {/* Poster — shown when not active */}
