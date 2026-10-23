@@ -1,9 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { extractDominantColor, dispatchLiveColor } from '../../lib/colorExtract';
+import { copyToClipboard } from '../../lib/copyToClipboard';
 
 const DEFAULT_V = 'jfKfPfyJRdk';
 
-interface Embed { v?: string; list?: string }
+interface Embed { provider?: 'youtube' | 'twitch'; v?: string; list?: string; channel?: string; vod?: string; clip?: string }
+interface PlaylistItem { title: string; link: string; pubDate?: string }
+interface SavedTemplate { id: string; name: string; media: Embed; items?: PlaylistItem[]; savedAt: string }
+const TEMPLATE_KEY = 'wb.media.templates.v1';
 interface PlayerState { volume: number; muted: boolean }
 
 function embedKey(widgetId?: string) {
@@ -12,6 +16,7 @@ function embedKey(widgetId?: string) {
 function resumeKey(widgetId?: string) {
   return widgetId ? `wb.widget.youtube.resume.v1.${widgetId}` : 'wb.widget.youtube.resume.v1';
 }
+function playlistCacheKey(widgetId?: string) { return widgetId ? 'wb.media.playlist.v1.' + widgetId : 'wb.media.playlist.v1'; }
 function stateKey(widgetId?: string) {
   return widgetId ? `wb.widget.youtube.state.v1.${widgetId}` : 'wb.widget.youtube.state.v1';
 }
@@ -27,14 +32,60 @@ function loadEmbed(widgetId?: string): Embed {
 
 function parseEmbed(input: string): Embed | null {
   const s = input.trim();
-  const videoM = s.match(/(?:youtube\.com\/(?:watch\?v=|embed\/(?!videoseries)|shorts\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-  const v = videoM?.[1] ?? (/^[a-zA-Z0-9_-]{11}$/.test(s) ? s : undefined);
-  // Only treat as playlist when there is no specific video ID to avoid player errors
-  const list = v ? undefined : s.match(/[?&]list=([a-zA-Z0-9_-]+)/)?.[1];
-  if (!v && !list) return null;
-  return { v, list };
+  if (/^[a-zA-Z0-9_-]{11}$/.test(s)) return { provider: 'youtube', v: s };
+  try {
+    const url = new URL(s);
+    const host = url.hostname.replace(/^www\./, '').toLowerCase();
+    if (['twitch.tv', 'm.twitch.tv', 'clips.twitch.tv', 'player.twitch.tv'].includes(host)) {
+      const parts = url.pathname.split('/').filter(Boolean);
+      const clipIndex = parts.indexOf('clip');
+      const clip = url.searchParams.get('clip') ?? (host === 'clips.twitch.tv' ? (parts[0] === 'embed' ? undefined : parts[0]) : (clipIndex >= 0 ? parts[clipIndex + 1] : undefined));
+      const videoIndex = parts.indexOf('videos');
+      const vod = url.searchParams.get('video') ?? (videoIndex >= 0 ? parts[videoIndex + 1] : undefined);
+      const channel = url.searchParams.get('channel') ?? (videoIndex < 0 && clipIndex < 0 && host !== 'clips.twitch.tv' ? parts[0] : undefined);
+      if (clip) return { provider: 'twitch', clip };
+      if (vod) return { provider: 'twitch', vod: vod.replace(/^v/, '') };
+      if (channel && !['directory', 'downloads', 'jobs', 'settings'].includes(channel)) return { provider: 'twitch', channel };
+      return null;
+    }
+    if (!['youtube.com', 'm.youtube.com', 'youtu.be', 'music.youtube.com'].includes(host)) return null;
+    const list = url.searchParams.get('list') ?? undefined;
+    const videoPath = url.pathname.match(/(?:^|\/)(?:embed\/(?!videoseries)|shorts\/|live\/)([a-zA-Z0-9_-]{11})/);
+    const v = url.searchParams.get('v') ?? videoPath?.[1] ?? (host === 'youtu.be' ? url.pathname.split('/').filter(Boolean)[0] : undefined);
+    if (!v && !list) return null;
+    return { provider: 'youtube', v: v?.slice(0, 11), list };
+  } catch { return null; }
 }
 
+function loadTemplates(): SavedTemplate[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(TEMPLATE_KEY) ?? '[]');
+    return Array.isArray(value) ? value.filter((x) => x && typeof x.name === 'string' && x.media) : [];
+  } catch { return []; }
+}
+
+function twitchEmbedUrl(embed: Embed): string {
+  const parent = encodeURIComponent(window.location.hostname);
+  const base = 'https://player.twitch.tv/?parent=' + parent + '&autoplay=false&muted=true';
+  if (embed.clip) return 'https://clips.twitch.tv/embed?clip=' + encodeURIComponent(embed.clip) + '&parent=' + parent;
+  if (embed.vod) return base + '&video=v' + encodeURIComponent(embed.vod);
+  return base + '&channel=' + encodeURIComponent(embed.channel ?? '');
+}
+
+function mediaUrl(value: Embed): string {
+  if (value.provider === 'twitch') return value.clip ? 'https://clips.twitch.tv/' + value.clip : value.vod ? 'https://www.twitch.tv/videos/' + value.vod : 'https://www.twitch.tv/' + (value.channel ?? '');
+  return value.list ? 'https://www.youtube.com/playlist?list=' + value.list : value.v ? 'https://www.youtube.com/watch?v=' + value.v : '';
+}
+
+function downloadTemplate(media: Embed, name = 'Media', items: PlaylistItem[] = []) {
+  const payload = { version: 'wb.media-template.v1', exportedAt: new Date().toISOString(), name, media, items };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'window-brain-' + (name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'media') + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
 function loadResume(videoId: string, widgetId?: string): number {
   try {
     const saved = JSON.parse(localStorage.getItem(resumeKey(widgetId)) ?? '{}') as Record<string, number>;
@@ -106,6 +157,11 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
   const [input, setInput]     = useState('');
   const [active, setActive]   = useState(false); // false = poster, true = player
   const [thumbErr, setThumbErr] = useState(false);
+  const [showPlaylist, setShowPlaylist] = useState(false);
+  const [playlistItems, setPlaylistItems] = useState<PlaylistItem[]>([]);
+  const [templates, setTemplates] = useState<SavedTemplate[]>(loadTemplates);
+  const [copied, setCopied] = useState(false);
+  const templateInputRef = useRef<HTMLInputElement>(null);
 
   // Volume control state
   const [volVal,   setVolVal]   = useState(100);
@@ -125,7 +181,29 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
   };
 
   // Reset to poster when embed changes
-  useEffect(() => { setActive(false); setThumbErr(false); }, [embed]);
+  useEffect(() => { setActive(false); setThumbErr(false); setShowPlaylist(false); }, [embed]);
+
+  useEffect(() => {
+    if (!embed.list || embed.provider === 'twitch') { setPlaylistItems([]); return; }
+    let alive = true;
+    try { setPlaylistItems(JSON.parse(localStorage.getItem(playlistCacheKey(widgetId)) ?? '[]') as PlaylistItem[]); }
+    catch { setPlaylistItems([]); }
+    const feed = 'https://www.youtube.com/feeds/videos.xml?playlist_id=' + encodeURIComponent(embed.list);
+    fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feed) + '&count=20')
+      .then((response) => response.json())
+      .then((data: { status?: string; items?: PlaylistItem[] }) => {
+        if (alive && data.status === 'ok' && Array.isArray(data.items)) {
+          setPlaylistItems(data.items);
+          try { localStorage.setItem(playlistCacheKey(widgetId), JSON.stringify(data.items)); } catch {}
+        }
+      })
+      .catch(() => {
+        if (!alive) return;
+        try { setPlaylistItems(JSON.parse(localStorage.getItem(playlistCacheKey(widgetId)) ?? '[]') as PlaylistItem[]); }
+        catch { setPlaylistItems([]); }
+      });
+    return () => { alive = false; };
+  }, [embed.list, embed.provider, widgetId]);
 
   // Extract dominant color from thumbnail and broadcast as live accent
   useEffect(() => {
@@ -138,14 +216,19 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
 
   // Reload from localStorage after import
   useEffect(() => {
-    const onUpdate = () => { setEmbed(loadEmbed(widgetId)); setActive(false); };
+    const onUpdate = () => { setEmbed(loadEmbed(widgetId)); setTemplates(loadTemplates()); setActive(false); };
+    const onTemplates = () => setTemplates(loadTemplates());
     window.addEventListener('wb:data-updated', onUpdate);
-    return () => window.removeEventListener('wb:data-updated', onUpdate);
+    window.addEventListener('wb:templates-updated', onTemplates);
+    return () => {
+      window.removeEventListener('wb:data-updated', onUpdate);
+      window.removeEventListener('wb:templates-updated', onTemplates);
+    };
   }, [widgetId]);
 
   // Build / tear down YT player when active
   useEffect(() => {
-    if (!active || !containerRef.current) return;
+    if (!active || embed.provider === 'twitch' || !containerRef.current) return;
     const videoId  = embed.v;
     const startSec = videoId ? loadResume(videoId, widgetId) : 0;
     let alive = true;
@@ -239,14 +322,58 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
     return () => window.removeEventListener('beforeunload', onUnload);
   }, [embed.v, widgetId]);
 
+  const persistEmbed = (next: Embed) => {
+    setEmbed(next);
+    try { localStorage.setItem(embedKey(widgetId), JSON.stringify(next)); } catch {}
+  };
+
+  const saveTemplate = () => {
+    const name = window.prompt('テンプレート名', embed.list ? 'YouTube Playlist' : embed.channel ? 'Twitch ' + embed.channel : 'Media');
+    if (!name?.trim()) return;
+    const next = [{ id: crypto.randomUUID(), name: name.trim(), media: embed, items: playlistItems, savedAt: new Date().toISOString() }, ...templates].slice(0, 40);
+    setTemplates(next);
+    try { localStorage.setItem(TEMPLATE_KEY, JSON.stringify(next)); } catch {}
+    window.dispatchEvent(new CustomEvent('wb:templates-updated'));
+  };
+
+  const importTemplate = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text()) as { version?: string; media?: Embed; name?: string; items?: PlaylistItem[] };
+      if (data.version !== 'wb.media-template.v1' || !data.media || !parseEmbed(mediaUrl(data.media))) throw new Error('invalid template');
+      persistEmbed(data.media);
+      const importedItems = Array.isArray(data.items) ? data.items : [];
+      setPlaylistItems(importedItems);
+      try { localStorage.setItem(playlistCacheKey(widgetId), JSON.stringify(importedItems)); } catch {}
+      if (data.name) {
+        const next = [{ id: crypto.randomUUID(), name: data.name, media: data.media, items: importedItems, savedAt: new Date().toISOString() }, ...templates].slice(0, 40);
+        setTemplates(next);
+        try { localStorage.setItem(TEMPLATE_KEY, JSON.stringify(next)); } catch {}
+        window.dispatchEvent(new CustomEvent('wb:templates-updated'));
+      }
+      setEditing(false);
+    } catch { window.alert('Window Brainのメディアテンプレートを読み込めませんでした'); }
+  };
+
+  const selectPlaylistItem = (item: PlaylistItem) => {
+    const next = parseEmbed(item.link);
+    if (next) { persistEmbed({ ...next, list: embed.list }); setShowPlaylist(false); }
+  };
+
   const applyUrl = () => {
     const next = parseEmbed(input);
-    if (next) {
-      setEmbed(next);
-      try { localStorage.setItem(embedKey(widgetId), JSON.stringify(next)); } catch {}
-    }
+    if (next) persistEmbed(next);
     setEditing(false);
     setInput('');
+  };
+
+  const copyMediaUrl = async () => {
+    if (await copyToClipboard(mediaUrl(embed))) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    }
   };
 
   const startEditing = (e: React.MouseEvent) => {
@@ -265,20 +392,27 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
   return (
     <div className="w-body" style={{ padding: 0 }}>
       {/* Header overlay — pointer-events:auto so this area acts as a drag handle */}
-      <div style={{ position: 'absolute', top: 28, left: 0, right: 0, padding: '6px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 3, background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 100%)' }}>
+      <div style={{ position: 'absolute', top: 28, left: 0, right: 0, padding: '6px 38px 6px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 3, background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 100%)' }}>
         <div className="w-head" style={{ margin: 0, color: '#fff', pointerEvents: 'none' }}>
           <div className="title">
             <span className="glyph" style={{ background: '#ff3355', boxShadow: '0 0 8px #ff3355' }} />
             YOUTUBE
           </div>
         </div>
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={startEditing}
-          style={{ background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(8px)', border: '.5px solid rgba(255,255,255,.25)', color: '#fff', borderRadius: 6, padding: '3px 9px', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.12em', cursor: 'pointer', pointerEvents: 'auto' }}
-        >
-          URL ✎
-        </button>
+        <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={copyMediaUrl}
+            title="動画URLをコピーして共有"
+            aria-label="動画URLをコピーして共有"
+            style={{ background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(8px)', border: '.5px solid rgba(255,255,255,.25)', color: '#fff', borderRadius: 6, padding: '3px 7px', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.08em', cursor: 'pointer', pointerEvents: 'auto' }}
+          >{copied ? 'COPIED' : 'COPY'}</button>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={startEditing}
+            style={{ background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(8px)', border: '.5px solid rgba(255,255,255,.25)', color: '#fff', borderRadius: 6, padding: '3px 8px', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.08em', cursor: 'pointer', pointerEvents: 'auto' }}
+          >URL ✎</button>
+        </div>
       </div>
 
       {/* Poster — shown when not active */}
@@ -318,24 +452,39 @@ export function YouTubeWidget({ widgetId }: { size?: { w: number; h: number }; w
           onPointerDown={(e) => e.stopPropagation()}
           style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(8,10,16,.88)', backdropFilter: 'blur(12px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24 }}
         >
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.18em', color: 'rgba(255,255,255,.55)' }}>YOUTUBE URL / VIDEO ID / PLAYLIST</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.18em', color: 'rgba(255,255,255,.55)' }}>YOUTUBE / PLAYLIST / TWITCH URL</div>
           <input
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') applyUrl(); if (e.key === 'Escape') setEditing(false); }}
-            placeholder="https://youtu.be/... or playlist URL"
+            placeholder="YouTube playlist / video or Twitch channel / VOD / clip"
             style={{ width: '100%', background: 'rgba(255,255,255,.08)', border: '.5px solid rgba(255,255,255,.25)', borderRadius: 8, padding: '9px 12px', color: '#fff', font: 'inherit', fontSize: 13, outline: 'none' }}
           />
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={applyUrl} style={{ background: 'var(--accent,#9aa6ff)', border: 'none', borderRadius: 7, padding: '7px 16px', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.12em', cursor: 'pointer', color: '#0a0d14', fontWeight: 500 }}>SET</button>
             <button onClick={() => setEditing(false)} style={{ background: 'rgba(255,255,255,.08)', border: '.5px solid rgba(255,255,255,.2)', borderRadius: 7, padding: '7px 16px', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.12em', cursor: 'pointer', color: 'rgba(255,255,255,.7)' }}>CANCEL</button>
           </div>
+          <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <select aria-label="保存済みメディアテンプレート" defaultValue="" onChange={(e) => { const selected = templates.find((item) => item.id === e.target.value); if (selected) { persistEmbed(selected.media); setPlaylistItems(selected.items ?? []); try { localStorage.setItem(playlistCacheKey(widgetId), JSON.stringify(selected.items ?? [])); } catch {} } }} style={{ minWidth: 0, flex: 1, background: 'rgba(255,255,255,.08)', border: '.5px solid rgba(255,255,255,.2)', borderRadius: 7, padding: 7, color: '#fff', font: 'inherit', fontSize: 11 }}>
+              <option value="" style={{ color: '#111' }}>保存済みテンプレート</option>
+              {templates.map((item) => <option key={item.id} value={item.id} style={{ color: '#111' }}>{item.name}</option>)}
+            </select>
+            <button onClick={saveTemplate} style={{ background: 'rgba(255,255,255,.08)', border: '.5px solid rgba(255,255,255,.2)', borderRadius: 7, padding: '7px 9px', color: '#fff', cursor: 'pointer', font: 'inherit', fontSize: 10 }}>保存</button>
+            <button onClick={() => downloadTemplate(embed, embed.list ? 'Playlist' : 'Media', playlistItems)} style={{ background: 'rgba(255,255,255,.08)', border: '.5px solid rgba(255,255,255,.2)', borderRadius: 7, padding: '7px 9px', color: '#fff', cursor: 'pointer', font: 'inherit', fontSize: 10 }}>書出</button>
+            <button onClick={() => templateInputRef.current?.click()} style={{ background: 'rgba(255,255,255,.08)', border: '.5px solid rgba(255,255,255,.2)', borderRadius: 7, padding: '7px 9px', color: '#fff', cursor: 'pointer', font: 'inherit', fontSize: 10 }}>読込</button>
+            <input ref={templateInputRef} type="file" accept="application/json,.json" hidden onChange={importTemplate} />
+          </div>
         </div>
       )}
 
-      {/* YT player container — mounted when active */}
-      {active && <div ref={containerRef} className="yt-player" style={{ position: 'absolute', inset: 0 }} />}
+      {/* Provider player — each widget stores its source under its own widget id */}
+      {active && embed.provider === 'twitch' && <iframe title="Twitch player" src={twitchEmbedUrl(embed)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />}
+      {active && embed.provider !== 'twitch' && <div ref={containerRef} className="yt-player" style={{ position: 'absolute', inset: 0 }} />}
+      {embed.list && !active && !editing && <button onPointerDown={(e) => e.stopPropagation()} onClick={() => setShowPlaylist((value) => !value)} style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 4, border: '.5px solid rgba(255,255,255,.28)', borderRadius: 6, background: 'rgba(0,0,0,.58)', color: '#fff', padding: '5px 9px', fontFamily: 'var(--font-mono)', fontSize: 9, cursor: 'pointer' }}>{showPlaylist ? 'CLOSE LIST' : 'PLAYLIST' + (playlistItems.length ? ' · ' + playlistItems.length : '')}</button>}
+      {showPlaylist && !active && <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: '48px 8px 44px', zIndex: 5, overflow: 'auto', borderRadius: 10, padding: 8, background: 'rgba(8,10,16,.9)', backdropFilter: 'blur(10px)' }}>
+        {playlistItems.length ? playlistItems.map((item, index) => <button key={item.link + '-' + index} onClick={() => selectPlaylistItem(item)} style={{ width: '100%', display: 'block', textAlign: 'left', padding: '8px 6px', border: 0, borderBottom: '.5px solid rgba(255,255,255,.12)', color: '#fff', background: 'transparent', fontSize: 11, cursor: 'pointer' }}>{item.title}</button>) : <div style={{ padding: 8, color: 'rgba(255,255,255,.62)', fontSize: 11 }}>プレイリストを読み込み中、または取得できません。再生ボタンからリストを開けます。</div>}
+      </div>}
 
       {/* Custom volume control — always visible while player is active */}
       {active && (

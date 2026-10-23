@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Size } from '../../types';
 import { extractDominantColor, dispatchLiveColor } from '../../lib/colorExtract';
+import { copyToClipboard } from '../../lib/copyToClipboard';
 
 const STORAGE_KEY = 'wb.widget.music.v1';
+const storageKey = (widgetId?: string) => widgetId ? STORAGE_KEY + '.' + widgetId : STORAGE_KEY;
 const DEFAULT_V = 'jfKfPfyJRdk';
 
 interface Embed { v?: string; list?: string }
 
-function loadEmbed(): Embed {
+function loadEmbed(widgetId?: string): Embed {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(widgetId)) ?? (widgetId === 'w-music' ? localStorage.getItem(STORAGE_KEY) : null);
     if (!raw) return { v: DEFAULT_V };
     const parsed = JSON.parse(raw);
     if (typeof parsed === 'string') return { v: parsed };
@@ -36,18 +38,19 @@ function buildSrc({ v, list }: Embed): string {
 
 interface Meta { title: string; author: string; thumb: string }
 
-export function NowPlayingWidget({ size }: { size: Size }) {
-  const [embed, setEmbed] = useState<Embed>(loadEmbed);
+export function NowPlayingWidget({ size, widgetId }: { size: Size; widgetId?: string }) {
+  const [embed, setEmbed] = useState<Embed>(() => loadEmbed(widgetId));
   const [meta, setMeta] = useState<Meta | null>(null);
   const [editing, setEditing] = useState(false);
   const [input, setInput] = useState('');
   const [playing, setPlaying] = useState(false);
+  const [copied, setCopied] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const iframeKey = useRef(0);
 
   // Reload from localStorage after import
   useEffect(() => {
-    const onUpdate = () => { setEmbed(loadEmbed()); setPlaying(false); };
+    const onUpdate = () => { setEmbed(loadEmbed(widgetId)); setPlaying(false); };
     window.addEventListener('wb:data-updated', onUpdate);
     return () => window.removeEventListener('wb:data-updated', onUpdate);
   }, []);
@@ -83,7 +86,7 @@ export function NowPlayingWidget({ size }: { size: Size }) {
       iframeKey.current++;
       setEmbed(next);
       setPlaying(false);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
+      try { localStorage.setItem(storageKey(widgetId), JSON.stringify(next)); } catch {}
     }
     setEditing(false);
     setInput('');
@@ -102,6 +105,16 @@ export function NowPlayingWidget({ size }: { size: Size }) {
     setPlaying(true);
   };
 
+  const copyMediaUrl = async () => {
+    const url = embed.list
+      ? `https://www.youtube.com/playlist?list=${embed.list}`
+      : `https://www.youtube.com/watch?v=${embed.v ?? DEFAULT_V}`;
+    if (await copyToClipboard(url)) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    }
+  };
+
   const albumSize = size.h >= 2 ? 72 : 48;
 
   return (
@@ -116,19 +129,23 @@ export function NowPlayingWidget({ size }: { size: Size }) {
             allowFullScreen
             title="Music player"
           />
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 3, background: 'linear-gradient(to bottom, rgba(0,0,0,.6) 0%, transparent 100%)' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '10px 38px 10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 3, background: 'linear-gradient(to bottom, rgba(0,0,0,.6) 0%, transparent 100%)' }}>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.18em', color: 'rgba(255,255,255,.7)', textTransform: 'uppercase' }}>NOW PLAYING</div>
-            <button onPointerDown={(e) => e.stopPropagation()} onClick={startEditing} style={{ background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(8px)', border: '.5px solid rgba(255,255,255,.25)', color: '#fff', borderRadius: 6, padding: '3px 8px', fontFamily: 'var(--font-mono)', fontSize: 9, cursor: 'pointer' }}>URL ✎</button>
+            <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+              <button onPointerDown={(e) => e.stopPropagation()} onClick={copyMediaUrl} title="動画URLをコピーして共有" aria-label="動画URLをコピーして共有" style={{ background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(8px)', border: '.5px solid rgba(255,255,255,.25)', color: '#fff', borderRadius: 6, padding: '3px 7px', fontFamily: 'var(--font-mono)', fontSize: 9, cursor: 'pointer' }}>{copied ? 'COPIED' : 'COPY'}</button>
+              <button onPointerDown={(e) => e.stopPropagation()} onClick={startEditing} style={{ background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(8px)', border: '.5px solid rgba(255,255,255,.25)', color: '#fff', borderRadius: 6, padding: '3px 8px', fontFamily: 'var(--font-mono)', fontSize: 9, cursor: 'pointer' }}>URL ✎</button>
+            </div>
           </div>
         </>
       )}
 
       {!playing && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', padding: '14px 16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingRight: 24, minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.18em', color: 'var(--ink-faint)', textTransform: 'uppercase' }}>NOW PLAYING</div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
               <span className="mono muted" style={{ fontSize: 9, letterSpacing: '.1em' }}>YOUTUBE</span>
+              <button onPointerDown={(e) => e.stopPropagation()} onClick={copyMediaUrl} title="動画URLをコピーして共有" aria-label="動画URLをコピーして共有" style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, padding: '0 2px' }}>{copied ? 'COPIED' : 'COPY'}</button>
               <button onPointerDown={(e) => e.stopPropagation()} onClick={startEditing} style={{ background: 'transparent', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, padding: '0 2px' }}>✎</button>
             </div>
           </div>
