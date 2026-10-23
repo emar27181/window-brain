@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Background } from './components/Background';
 import { SettingsModal } from './components/SettingsModal';
+import { LayoutAssistantModal } from './components/LayoutAssistantModal';
 import {
   TweaksPanel, TweakSection, TweakToggle, TweakRadio, TweakSelect, TweakColor, TweakButton,
 } from './components/TweaksPanel';
@@ -270,6 +271,7 @@ export default function App() {
   const [layout, setLayout] = useState<WidgetItem[]>(loadLayout);
   const [picker, setPicker] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [layoutAssistantOpen, setLayoutAssistantOpen] = useState(false);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [resize, setResize] = useState<ResizeState | null>(null);
   const [toast, setToast] = useState<{ msg: string; kind: string } | null>(null);
@@ -751,6 +753,7 @@ export default function App() {
           <button onClick={toggleFullscreen} title={isFullscreen ? '全画面を終了' : '全画面表示'}>{isFullscreen ? 'EXIT FULLSCREEN' : 'FULLSCREEN'}</button>
           <button onClick={() => setTweaksOpen(true)} title="カスタマイズ">TWEAKS</button>
           <button onClick={() => setSettings(true)} title="設定">SETTINGS</button>
+          <button onClick={() => setLayoutAssistantOpen(true)} title="指示から配置候補を作る">LAYOUT</button>
           <button className="add" onClick={() => setPicker(true)}>
             <span className="plus">+</span><span>ADD</span>
           </button>
@@ -769,7 +772,7 @@ export default function App() {
               if (!def) return null;
               const W = def.Component;
               const span2 = item.w >= 4 || item.h >= 3;
-              const H_MAP: Record<number, number> = { 1: 110, 2: 170, 3: 250, 4: 330 };
+              const H_MAP: Record<number, number> = { 1: 110, 2: 170, 3: 300, 4: 330 };
               const cellH = H_MAP[Math.min(item.h, 4)] ?? 170;
               const mobileSize = { w: span2 ? Math.max(item.w, 4) : 2, h: item.h };
               return (
@@ -837,6 +840,18 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {layoutAssistantOpen && (
+        <LayoutAssistantModal
+          onClose={() => setLayoutAssistantOpen(false)}
+          onApply={(next) => {
+            setLayout(next);
+            saveLayout(next);
+            setLayoutAssistantOpen(false);
+            flashToast('レイアウトを適用しました');
+          }}
+        />
+      )}
 
       {picker && (
         <div className="picker-bd" onClick={() => setPicker(false)}>

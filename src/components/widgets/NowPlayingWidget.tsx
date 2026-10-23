@@ -3,13 +3,14 @@ import type { Size } from '../../types';
 import { extractDominantColor, dispatchLiveColor } from '../../lib/colorExtract';
 
 const STORAGE_KEY = 'wb.widget.music.v1';
+const storageKey = (widgetId?: string) => widgetId ? STORAGE_KEY + '.' + widgetId : STORAGE_KEY;
 const DEFAULT_V = 'jfKfPfyJRdk';
 
 interface Embed { v?: string; list?: string }
 
-function loadEmbed(): Embed {
+function loadEmbed(widgetId?: string): Embed {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(widgetId)) ?? (widgetId === 'w-music' ? localStorage.getItem(STORAGE_KEY) : null);
     if (!raw) return { v: DEFAULT_V };
     const parsed = JSON.parse(raw);
     if (typeof parsed === 'string') return { v: parsed };
@@ -36,8 +37,8 @@ function buildSrc({ v, list }: Embed): string {
 
 interface Meta { title: string; author: string; thumb: string }
 
-export function NowPlayingWidget({ size }: { size: Size }) {
-  const [embed, setEmbed] = useState<Embed>(loadEmbed);
+export function NowPlayingWidget({ size, widgetId }: { size: Size; widgetId?: string }) {
+  const [embed, setEmbed] = useState<Embed>(() => loadEmbed(widgetId));
   const [meta, setMeta] = useState<Meta | null>(null);
   const [editing, setEditing] = useState(false);
   const [input, setInput] = useState('');
@@ -47,7 +48,7 @@ export function NowPlayingWidget({ size }: { size: Size }) {
 
   // Reload from localStorage after import
   useEffect(() => {
-    const onUpdate = () => { setEmbed(loadEmbed()); setPlaying(false); };
+    const onUpdate = () => { setEmbed(loadEmbed(widgetId)); setPlaying(false); };
     window.addEventListener('wb:data-updated', onUpdate);
     return () => window.removeEventListener('wb:data-updated', onUpdate);
   }, []);
@@ -83,7 +84,7 @@ export function NowPlayingWidget({ size }: { size: Size }) {
       iframeKey.current++;
       setEmbed(next);
       setPlaying(false);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
+      try { localStorage.setItem(storageKey(widgetId), JSON.stringify(next)); } catch {}
     }
     setEditing(false);
     setInput('');
